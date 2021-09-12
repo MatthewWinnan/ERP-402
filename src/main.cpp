@@ -7,6 +7,7 @@
 #include "main.h"
 #include <ctime>
 #include <iostream>
+#include <string>
 
 
 int main() {
@@ -107,6 +108,8 @@ int main() {
                tx_data.push_back(rx_buffer[i]);
                } 
             QueueEntry newEntry (tx_data,QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000);
+            std::cout<<"Enqeued entry with dead time "<<std::to_string(newEntry.GetExpireTime())<<" Current time is "<<std::to_string(clock())<<endl;
+            std::cout<<"Total clock cycles that it will survive "<<std::to_string(QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000)<<" now it is "<<std::to_string(newEntry.GetTimeTillExpire())<<endl;
            if(!message_request_queue.Enqueue(newEntry))
            {
                std::cout<<"Error enqeueing in line 112"<<endl;
@@ -1367,6 +1370,7 @@ void message_queue_handler(void)
     //First checks what device are we at 
     if (message_request_queue.GetSize()>0)
     {
+        logInfo("Something in message_queue_handler()");
     #if ACTIVE_USER == DESTINATION_NODE
             if(message_request_queue.DequeueFront(handleRequest))
         {
@@ -1421,6 +1425,9 @@ void message_queue_handler(void)
                     //Successfully dequed packet
                     logInfo("Calling function forward_message line 1410");
                     forward_message(handleRequest.GetPacket(),destination_ip_address,device_ip_address);
+                }
+                else {
+                    std::cout<<"Odd it just disappeared"<<endl;
                 }
 
             }

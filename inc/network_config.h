@@ -12,7 +12,7 @@
 
 //Select the active user
 #if !defined(ACTIVE_USER)
-#define ACTIVE_USER  CLIENT_NODE
+#define ACTIVE_USER  DESTINATION_NODE
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS
@@ -39,7 +39,7 @@
 #define TIMEOUT_BUFFER  2 
 #define QUEUE_BUFFER_TIME 2000 //The maximum period of time that a routing protocol is allowed to buffer a packet for, milli-seconds
 #define QUEUE_SIZE 10 //Defines the max amount to go to queue
-#define QUEUE_TIMEOUT 200000 //Expire time for queue entry
+#define QUEUE_TIMEOUT 20000 //Expire time for queue entry
 #define K_VALUE 5
 #define DELETE_PERIOD K_VALUE * max (ACTIVE_ROUTE_TIMEOUT, HELLO_INTERVAL)
 #define HELLO_TIME_OUT 60000

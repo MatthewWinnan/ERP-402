@@ -1,5 +1,6 @@
 #include "aodv_queue.h"
 #include <iostream>
+#include <string>
 RequestQueue::RequestQueue(uint32_t maxLen, clock_t routeToQueueTimeout)
         : m_maxLen (maxLen),
           m_queueTimeout (routeToQueueTimeout+clock())
@@ -69,7 +70,7 @@ RequestQueue::Enqueue (QueueEntry & entry)
                 }
     }
     //Sets expire time and checks queue size dequeue if too big
-    entry.SetExpireTime (m_queueTimeout);
+    entry.SetExpireTime (m_queueTimeout+entry.GetTimeTillExpire());
     if (m_queue.size () == m_maxLen)
     {
         Drop (m_queue.front (), "Drop the most aged packet"); // Drop the most aged packet
@@ -77,6 +78,8 @@ RequestQueue::Enqueue (QueueEntry & entry)
     }
     //Adds the packet to the queue
     m_queue.push_back (entry);
+    // std::cout<<"Pushed back entry with dead time "<<std::to_string(entry.GetExpireTime())<<" current time is"<<std::to_string(entry.GetExpireTime())<<endl;
+    // std::cout<<"m_queueTimeout is "<<std::to_string(m_queueTimeout)<<endl;
     return true;
 }
 
@@ -177,6 +180,8 @@ void
 RequestQueue::Drop (QueueEntry en, std::string reason)
 {
     std::cout<<"Dropped packet to "<<en.GetPacket().at(MESSAGE_PACKET_DESTINATION)<<": "<<reason<<endl;
+    std::cout<<"Packet dies at "<<std::to_string(en.GetExpireTime())<<" the current time is "<<std::to_string(clock())<<endl;
+    std::cout<<" Time to expire "<<std::to_string(en.GetTimeTillExpire())<<endl;
 
     return;
 }

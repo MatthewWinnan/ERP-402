@@ -43,6 +43,7 @@ void message_queue_handler(void);
 #elif ACTIVE_USER == CLIENT_NODE
     uint8_t device_ip_address = 20;
     uint8_t destination_ip_address = 100;
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
