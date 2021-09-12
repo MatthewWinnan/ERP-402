@@ -1,4 +1,5 @@
 #include "aodv_table.h"
+#include <iostream>
   RouteEntity::RouteEntity(uint8_t next, uint8_t hop) {
 
      next_hop = next;
@@ -332,8 +333,30 @@ void RoutingTable::InvalidateRoutesWithDst(const std::map<uint8_t, uint32_t> &un
     }
 }
 
-void RoutingTable::Print() const {
-    std::cout<<"TODO print info about routing table"<<std::endl;
+void RoutingTable::Print()  {
+    Purge ();
+    std::cout<<"----ROUTING TABLE HAS THE CONTENTS------"<<endl;
+        for (std::map<uint8_t, RoutingTableEntry>::const_iterator i =
+            m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
+    {
+        if (i->second.GetFlag()==VALID)
+        {
+            std::cout<<"Destination :"<<i->first<<" has a VALID path"<<endl;
+        }
+        else  if (i->second.GetFlag()==IN_SEARCH)
+        {
+            std::cout<<"Destination :"<<i->first<<" has a IN_SEARCH path"<<endl;
+        }
+        else {
+        std::cout<<"Destination :"<<i->first<<" has a INVALID path"<<endl;
+        }
+        //TODO print all paths in entry
+        std::cout<<"Next hop: "<<i->second.GetNextHop(0)<<endl;
+        std::cout<<"Hop Count: "<<i->second.GetHop()<<endl;
+        std::cout<<"Sequence number: "<<i->second.GetSeqNo()<<endl;
+
+    }
+    
 }
 
 void RoutingTable::Purge(std::map<uint8_t, RoutingTableEntry> &table) const {

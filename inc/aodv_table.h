@@ -290,7 +290,7 @@ public:
     void Purge ();
 //   bool MarkLinkAsUnidirectional (Ipv4Address neighbor, clock_t blacklistTimeout);
 //TODO ADD PRINT FUNCTIONALITY
-    void Print () const;
+    void Print () ;
 
 
 };
