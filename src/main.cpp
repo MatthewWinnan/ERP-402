@@ -107,6 +107,15 @@ int main() {
            for (int i =0; i<rx_in ; i= i+1) {
                tx_data.push_back(rx_buffer[i]);
                } 
+            uint8_t type = 6;
+
+            tx_data.insert(tx_data.begin(),0);
+            tx_data.insert(tx_data.begin(),destination_ip_address);
+            tx_data.insert(tx_data.begin(),device_ip_address);
+            tx_data.insert(tx_data.begin(),device_ip_address);
+            tx_data.insert(tx_data.begin(),0);
+            tx_data.insert(tx_data.begin(),type);
+
             QueueEntry newEntry (tx_data,QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000);
             std::cout<<"Enqeued entry with dead time "<<std::to_string(newEntry.GetExpireTime())<<" Current time is "<<std::to_string(clock())<<endl;
             std::cout<<"Total clock cycles that it will survive "<<std::to_string(QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000)<<" now it is "<<std::to_string(newEntry.GetTimeTillExpire())<<endl;
@@ -608,15 +617,15 @@ bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
          {
            if (toDst.GetValidSeqNo ())
              {
-               //SendRerrWhenNoRouteToForward (dst, toDst.GetSeqNo (), origin);
-               logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward.");
+               SendRerrWhenNoRouteToForward (dst, toDst.GetSeqNo (), origin);
+               logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
                return false;
              }
          }
      }
-    logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward.");
+    logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
     //TODO add the RRER responses
-   //SendRerrWhenNoRouteToForward (dst, 0, origin);
+   SendRerrWhenNoRouteToForward (dst, 0, origin);
    return false;
     } 
     
@@ -1372,34 +1381,51 @@ void message_queue_handler(void)
     {
         logInfo("Something in message_queue_handler()");
     #if ACTIVE_USER == DESTINATION_NODE
+    
             if(message_request_queue.DequeueFront(handleRequest))
         {
+            if ((handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)!=20) && (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address))
+            {
+                //Not from the client
             //Dequed fine
             if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
             {
-               std::cout<<"Routed forward line 1362"<<endl; //successfully routed
+               std::cout<<"Routed forward line 1393"<<endl; //successfully routed
             }
             else
             {
-                std::cout<<"Couldn't route forward line 1366"<<endl;
+                std::cout<<"Couldn't route forward line 1397"<<endl;
+            }                
+            }
+            else {
+            std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
+            <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
             }
         }
         else
         {
-            std::cout<<"Dequeue failure line 1371"<<endl;
+            std::cout<<"Dequeue failure line 1407"<<endl;
         }
 
     #elif ACTIVE_USER == ROUTING_NODE   
         if(message_request_queue.DequeueFront(handleRequest))
         {
+            if (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address)
+            {
+                //Not from the client
             //Dequed fine
             if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
             {
-               std::cout<<"Routed forward line 1380"<<endl; //successfully routed
+               std::cout<<"Routed forward line 1419"<<endl; //successfully routed
             }
             else
             {
-                std::cout<<"Couldn't route forward line 1384"<<endl;
+                std::cout<<"Couldn't route forward line 1423"<<endl;
+            }                
+            }
+            else {
+            std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
+            <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
             }
         }
         else
@@ -1423,7 +1449,7 @@ void message_queue_handler(void)
                 if(message_request_queue.Dequeue(destination_ip_address, handleRequest))
                 {
                     //Successfully dequed packet
-                    logInfo("Calling function forward_message line 1410");
+                    logInfo("Calling function forward_message line 1453");
                     forward_message(handleRequest.GetPacket(),destination_ip_address,device_ip_address);
                 }
                 else {
@@ -1676,12 +1702,12 @@ int send_message_data(uint8_t recipient_address, uint8_t sender_address,uint8_t 
     //packet-> the data to be forwarded
     /////////////////////////////////////////////////////////
     uint8_t type = 6;
-    packet.insert(packet.begin(),ttl);
-    packet.insert(packet.begin(),dest);
-    packet.insert(packet.begin(),origin);
-    packet.insert(packet.begin(),sender_address);
-    packet.insert(packet.begin(),recipient_address);
-    packet.insert(packet.begin(),type);
+    packet.at(MESSAGE_PACKET_TTL) = ttl;
+    packet.at(MESSAGE_PACKET_DESTINATION) = dest;
+    packet.at(MESSAGE_PACKET_ORIGIN) = origin;
+    packet.at(MESSAGE_PACKET_SENDER) = sender_address;
+    packet.at(MESSAGE_PACKET_RECIPIENT) = recipient_address;
+    packet.at(MESSAGE_PACKET_TYPE) = type;
     //wait for the radio to be done
     wait_on_radio();
     return send_data(packet);
@@ -1801,7 +1827,7 @@ void Hallo_Timer_Expire()
             std::cout<<"Not in the table"<<endl;
         }
         else {
-            std::cout<<"The current state of the route is "<<toDst.GetFlag()<<endl;
+            m_routing_table.Print();
         }
         ///
         std::vector<uint8_t> delete_list; //stores dst to be removed
@@ -1866,6 +1892,8 @@ void Hallo_Timer_Expire()
                 m_rreq_retry.erase(*i);
                 //All packets from message queue should be removed
                 message_request_queue.DropPacketWithDst(*i);
+                std::cout<<"Deleting route entry for "<<*i<<" being dropped line 1869"<<endl;
+                m_routing_table.DeleteRoute(*i);
         }
     }
 
