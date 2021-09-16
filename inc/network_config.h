@@ -15,6 +15,18 @@
 #define ACTIVE_USER  DESTINATION_NODE
 #endif
 
+//////////////////////////////////////////////////////////////////////////////
+////// ADDING VERSION CONTROL FOR DEMO PURPOSES /////////////////////////////
+////////////////////////////////////////////////////////////////////////////
+
+#define AODV 1
+#define AOMDV 2
+
+//Select the current protocol version
+#if !defined(ACTIVE_VERSION)
+#define ACTIVE_VERSION  AOMDV
+#endif
+
 //NOTE ALL TIMING IS DONE IN MS
 //TO USE WITH QUEUE TIMING CONVERT TO TIME IN TERMS OF CPU TICKS
 
@@ -155,7 +167,8 @@
 //      Route Reply (RREP)              2
 //      Route Error (RERR)              3
 //      Route-Reply Ack (RREP-ACK)      4
-//      My Hallo Message Extention Typing Use theirs????
+//      My Hallo Message Extention      5
+//      Data packets                    6
 //Enumerations for network definitions
 typedef enum {
     ROUTE_REQUEST = 1,

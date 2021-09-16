@@ -5,6 +5,7 @@
 
 
 #include <algorithm>  
+#include <cstdint>
 #include "aodv_neighbours.h"
 #include "aodv_queue.h"
 #include "aodv_table.h"
@@ -284,6 +285,10 @@ std::map<uint8_t, clock_t> m_addressReqTimer;
 //KEY   VALUE
 //dst   retries
 std::map<uint8_t, uint8_t> m_rreq_retry;
+//Tracks the packets to be sent over for retrying
+//KEY   VALUE
+//dst   packet
+std::map<uint8_t, std::vector<uint8_t>> m_rreq_buffer;
 
 //Repeatedly call this to check the rate of RREQ and to reschedule RREQ
 void RouteRequestTimerExpire ();

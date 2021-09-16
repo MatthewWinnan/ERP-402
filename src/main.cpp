@@ -2,8 +2,10 @@
 /// SUMMARY OF INNER WORKINGS OF THE PROGRAM SPECIFICS WILL FOLLOW AT FILES ///
 ///////////////////////////////////////////////////////////////////////////////
 ///// ROUTE DETECTION ////////////////////////////////////////////////////////
-//TODO FIX NECTHOP AODVM
+//TODO FIX NEXTHOP AOVDM
 //TODO FIX SEQUENCE NUMBER UPDATE AOVDM
+//TODO CHECK RRER FOR AOVDM
+
 #include "main.h"
 #include <ctime>
 #include <iostream>
@@ -197,17 +199,9 @@ void start()
  void obtain_neighbours()
  {
      logInfo("Initial HALLO message is being schedule to be sent");
-    //TODO hallo time out
     SendHallo(); 
      }    
- 
-//void check_hallo_timer(void )
-//{
-//    if((clock()-hallo_time)>HELLO_TIME_OUT)
-//    {
-//        
-//        }
-//    } 
+
 void wait_on_radio()
 {
     }
@@ -417,7 +411,6 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
    if (m_rerrCount == RERR_RATELIMIT)
      {
        // Just make sure that the RerrRateLimit timer is running and will expire
-       //TODO make the RRER timer
        // discard the packet and return
        logInfo("RRER rate limit has been reached");
        return;
@@ -526,7 +519,6 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
    if (m_rerrCount == RERR_RATELIMIT)
      {
        // Just make sure that the RerrRateLimit timer is running and will expire
-       //TODO make the RRER timer
        // discard the packet and return
        logInfo("RRER rate limit has been reached");
        return;
@@ -624,7 +616,6 @@ bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
          }
      }
     logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
-    //TODO add the RRER responses
    SendRerrWhenNoRouteToForward (dst, 0, origin);
    return false;
     } 
@@ -659,48 +650,6 @@ bool Route_Input(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
 //     }
   //TODO should I check for dublicate packets
    // Broadcast local delivery/forwarding
-//   for (std::map<Ptr<Socket>, Ipv4InterfaceAddress>::const_iterator j =
-//          m_socketAddresses.begin (); j != m_socketAddresses.end (); ++j)
-//     {
-//       Ipv4InterfaceAddress iface = j->second;
-//       if (m_ipv4->GetInterfaceForAddress (iface.GetLocal ()) == iif)
-//         {
-//           if (dst == iface.GetBroadcast () || dst.IsBroadcast ())
-//             {
-//               if (m_dpd.IsDuplicate (p, header))
-//                 {
-//                   NS_LOG_DEBUG ("Duplicated packet " << p->GetUid () << " from " << origin << ". Drop.");
-//                   return true;
-//                 }
-//               UpdateRouteLifeTime (origin, m_activeRouteTimeout);
-//               Ptr<Packet> packet = p->Copy ();
-//               if (!m_enableBroadcast)
-//                 {
-//                   return true;
-//                 }
-//               if (header.GetTtl () > 1)
-//                 {
-//                   NS_LOG_LOGIC ("Forward broadcast. TTL " << (uint16_t) header.GetTtl ());
-//                   RoutingTableEntry toBroadcast;
-//                   if (m_routingTable.LookupRoute (dst, toBroadcast))
-//                     {
-//                       Ptr<Ipv4Route> route = toBroadcast.GetRoute ();
-//                       ucb (route, packet, header);
-//                     }
-//                   else
-//                     {
-//                       NS_LOG_DEBUG ("No route to forward broadcast. Drop packet " << p->GetUid ());
-//                     }
-//                 }
-//               else
-//                 {
-//                   NS_LOG_DEBUG ("TTL exceeded. Drop packet " << p->GetUid ());
-//                 }
-//               return true;
-//             }
-//         }
-//     }
-  
    // Checks if this node is the destination
    if (dst == device_ip_address)
      {
@@ -920,7 +869,6 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
      {
        m_routing_table.LookupRoute (origin, toOrigin);
        logInfo ("Send reply since I am the destination");
-       //TODO Make RREP send REPLY
        SendReply (packet, toOrigin);
        return;
      }
@@ -971,8 +919,9 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        logDebug ("TTL exceeded. Drop RREQ origin " );
        return;
      }
-  
-  //TODO I GUESS THEN I SEND A RREQ AS REPLY????
+    
+    // //Schedule a wait thing to wait to RREQ again depedning on repeats.
+    // ScheduleRreqRetry (dst);
   //JUST SENDING AN RREQ AGAIN I GUESS
     packet.at(RREQ_PACKET_TTL) = packet.at(RREQ_PACKET_TTL) - 1; 
     //change RREQ source to this address
@@ -1841,7 +1790,7 @@ void Hallo_Timer_Expire()
             {
                 //This means it will be the first retry
                 m_rreq_retry.insert(std::make_pair (i->first, 1));
-                //TODO update new time
+                //Update new time done in void ScheduleRreqRetry(uint8_t dst)
                 send_rreq(i->first); //First resend the RREQ
                 }//if
             else
@@ -1857,7 +1806,6 @@ void Hallo_Timer_Expire()
                         //drops exceed the limit thus link error
                         //Also remove it from both lists
                         std::cout<<"The route to destination "<<element->first<<" could not be found "<<endl;
-                        //TODO remove this from the list
                         ScheduleRreqRetry(element->first);
                         delete_list.push_back(element->first);
                         }
@@ -1865,7 +1813,7 @@ void Hallo_Timer_Expire()
                     {
                         //update element
                         element->second+=1;
-                        //TODO set new time based on exponential
+                        // Set new time based on exponential is done in void ScheduleRreqRetry(uint8_t dst)
                         send_rreq(element->first); //First resend the RREQ
                         }
                 }
@@ -1873,7 +1821,7 @@ void Hallo_Timer_Expire()
                 {
                     //it is not actually in yet so insert it
                     m_rreq_retry.insert(std::make_pair (i->first, 1));
-                    //TODO update new time
+                    //Update new time is done in void ScheduleRreqRetry(uint8_t dst)
                     send_rreq(element->first); //First resend the RREQ
                     }
                 

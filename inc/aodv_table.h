@@ -62,7 +62,7 @@ private:
     std::vector<RouteEntity> m_route_list;
     std::vector<uint8_t> m_precursorList;
     uint8_t m_reqCount;
-    LoRaRoute m_LoRa_route;
+    LoRaRoute m_LoRa_route; //defines current selected route
 
 public:
      RoutingTableEntry (uint8_t dst, uint8_t seqNo , uint8_t advertised_hopcount , std::vector<RouteEntity> route_list, clock_t expiration_timeout ,uint8_t src);
@@ -78,6 +78,37 @@ public:
     void GetPrecursors (std::vector<uint8_t> prec) const;
     //\}
 
+    /////////////////////////////////////////////////////////
+    ///AOVDM SPECIFIC FUNCTIONS ///////////////////////////
+    ///////////////////////////////////////////////////////
+
+    #if ACTIVE_VERSION==AOMDV
+
+    void update_advertise_hop()
+    {
+        //On every sequence number update the advertised hopcount
+        uint8_t max_hop = 0;
+    for (std::vector<RouteEntity>::iterator i =m_route_list.begin (); i != m_route_list.end (); ++i)
+    {
+        if (i->get_hopcount()>max_hop)
+        {
+            max_hop = i->get_hopcount(); 
+        }
+    }
+    m_advertised_hopcount = max_hop;
+    }
+
+    void set_advertise_hop(uint8_t value)
+    {
+        m_advertised_hopcount = value;
+    }
+
+    uint8_t get_advertise_hop()
+    {
+        return m_advertised_hopcount;
+    }
+    #endif
+///////////////////////////////////////////////
     void setRouteList(std::vector<RouteEntity> route_list)
     {
         m_route_list = route_list;
@@ -109,6 +140,7 @@ public:
             return false;
         }
     }
+    
     // Fields
     uint8_t GetDestination () const
     {
