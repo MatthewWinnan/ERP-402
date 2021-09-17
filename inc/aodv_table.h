@@ -88,24 +88,36 @@ public:
     {
         //On every sequence number update the advertised hopcount
         uint8_t max_hop = 0;
-    for (std::vector<RouteEntity>::iterator i =m_route_list.begin (); i != m_route_list.end (); ++i)
-    {
-        if (i->get_hopcount()>max_hop)
+        if (m_route_list.empty())
         {
-            max_hop = i->get_hopcount(); 
+            //It is empty so make next hop NET_DIAMETER
+            max_hop = NET_DIAMETER;
         }
-    }
+        else {
+            for (std::vector<RouteEntity>::iterator i =m_route_list.begin (); i != m_route_list.end (); ++i)
+            {
+                if (i->get_hopcount()>max_hop)
+                {
+                    max_hop = i->get_hopcount(); 
+                }
+            }        
+        }
     m_advertised_hopcount = max_hop;
     }
 
-    void set_advertise_hop(uint8_t value)
+    void update_LoRa_path() //Used to update what path sould be chosen. For now forward to path with the smallest hop
     {
-        m_advertised_hopcount = value;
-    }
-
-    uint8_t get_advertise_hop()
-    {
-        return m_advertised_hopcount;
+        //Assuming made here it is new hop look at smallest hop best
+        m_LoRa_route.SetNextHop(m_route_list.front().get_next_hop());
+        for (int i = 1; i<m_route_list.size(); i++)
+         {
+          if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
+          {
+            //This is smaller so make this next hop
+            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
+            m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+            }
+        }         
     }
     #endif
 ///////////////////////////////////////////////

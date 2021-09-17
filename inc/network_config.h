@@ -179,6 +179,15 @@ typedef enum {
     DATA_MESSAGE = 6,
 } MessageTypes;
 
+////////////////////////////////////////////////
+/////ADDITIONAL AOMDV CONFIGURATIONS////////////
+////////////////////////////////////////////////
+#if ACTIVE_VERSION==AOMDV
+#define RREQ_PACKET_ORIGIN_NEIGH 13
+#define RREP_PACKET_ORIGIN_NEIGH 11
+#endif
+
+
 #endif
 
 

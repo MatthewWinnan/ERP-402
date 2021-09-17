@@ -6,6 +6,7 @@
 
 #include <algorithm>  
 #include <cstdint>
+#include <vector>
 #include "aodv_neighbours.h"
 #include "aodv_queue.h"
 #include "aodv_table.h"
@@ -38,6 +39,18 @@ void message_queue_handler(void);
 #if ACTIVE_USER == DESTINATION_NODE
     uint8_t device_ip_address = 100;
     uint8_t destination_ip_address = 100;
+    #if ACTIVE_VERSION == AOMDV
+    //Unique RREQ respond method to maintain link disjointness
+    uint8_t k = 3; //Amount of copies from unique source neighbour to respond to
+    //Tracks the amount of responses to a unique source neighbour
+    //KEY            VALUE
+    //source_neigh   amount received
+    std::map<uint8_t, uint8_t> source_neighbour_reply_amount;
+    // //Tracks the devices that broadcasted the RREQ from unique source to see if a new RREQ
+    // //KEY            VALUE
+    // //source_neigh   list of neighbours of destination
+    // std::map<uint8_t, std::vector<uint8_t>> source_neighbour_receive_list;
+    #endif
 #elif ACTIVE_USER == ROUTING_NODE
     uint8_t device_ip_address = 50;
     uint8_t destination_ip_address = 100;
@@ -63,6 +76,11 @@ uint8_t m_neighbourCount; //how many tries to reach neighbour
 EventQueue main_queue(32 * EVENTS_EVENT_SIZE); //this will call an event in IRQ so the process can be handled safely.
 Thread main_thread; //Thread that handles the queue
 
+#if ACTIVE_VERSION == AOMDV
+//KEY           VALUE
+//Origin ID     list of neighbours that RREQ has been received from
+std::map<uint8_t, std::vector<uint8_t>> firsthop_list; //list of neighbour nodes of origin from which RREQ has been received.
+#endif
 ///////////////////////////////////////////////////////////////////////////////
 //////////MAIN FUNCTIONS//////////////////////////////////////////////////////
 //Function that waits on radio to finish
@@ -83,7 +101,7 @@ void send_rreq(uint8_t dest);
 //Parameters
 //packet packet from RREQ message that provoked this reply
 //toOrigin table entry to route reply to the origin of the RREQ
-void SendReply(std::vector<uint8_t> packet , RoutingTableEntry const & toOrigin);
+void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin);
 
 //Send RREP by intermediate node.
 //Parameters
@@ -211,7 +229,15 @@ void ScheduleRreqRetry(uint8_t dst);
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////PACKET SENDING FUNCTIONS/////////////////////////////////////////
+#if ACTIVE_VERSION == AOMDV //redefinitions for AOMDV specific functionality
+
+int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source);
+
+#elif ACTIVE_VERSION==AODV
+
 int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack);
+
+#endif
 
 int send_rrep(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack);
 

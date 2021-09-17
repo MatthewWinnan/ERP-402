@@ -5,11 +5,14 @@
 //TODO FIX NEXTHOP AOVDM
 //TODO FIX SEQUENCE NUMBER UPDATE AOVDM
 //TODO CHECK RRER FOR AOVDM
-
+//NB GetHop is the same as get advertised hop
+//NB SetHop is the same as set advertised hop
+//NB To Look For AOMDV specific things simply CTRL+F and search ACTIVE_VERSION
 #include "main.h"
 #include <ctime>
 #include <iostream>
 #include <string>
+#include <vector>
 
 
 int main() {
@@ -267,7 +270,7 @@ void send_reply_ack(uint8_t neighbor_add)
    send_ack(neighbor_add, device_ip_address, 1);
     }
     
-void SendReply(std::vector<uint8_t> packet , RoutingTableEntry const & toOrigin)
+void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin)
 {
        logInfo ("Sending a reply back from destination");
    /*
@@ -277,7 +280,12 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry const & toOrigin)
    if (!(packet.at(RREQ_PACKET_UNKOWN_SEQ)==1) && (packet.at(RREQ_PACKET_DESTINATION_SEQ) == m_sequence + 1))
      {
        m_sequence++;
-     }                                     
+     }  
+
+     #if ACTIVE_VERSION == AOMDV
+        //If a request is sent update the advertised hop count
+        toOrigin.update_advertise_hop();
+     #endif                                   
     uint8_t ttl =toOrigin.GetHop ();
     //Sends the RREP now
     //send_rrep( toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl);
@@ -314,6 +322,11 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
    toOrigin.InsertPrecursor (toDst.GetNextHop (0));
    m_routing_table.Update (toDst);
    m_routing_table.Update (toOrigin);
+   #if ACTIVE_VERSION == AOMDV
+   //Everytime a request is sent update advertised hop count
+   toDst.update_advertise_hop();
+   toOrigin.update_advertise_hop();
+   #endif
    //sending rrep towards origin route entry next hop
     send_rrep(toOrigin.GetNextHop (0), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m);
   
@@ -332,7 +345,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
        send_rrep(toDst.GetNextHop (0), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g);
      }
     }      
-void send_rreq(uint8_t dest)
+void send_rreq(uint8_t dest)//Only client really calls this
 {
     //create an initial dummy
     std::vector<RouteEntity> route_list;
@@ -373,11 +386,20 @@ void send_rreq(uint8_t dest)
        rt.SetFlag (IN_SEARCH);
        rt.SetLifeTime (NET_TRAVERSAL_TIME);
        m_routing_table.Update (rt);
+        #if ACTIVE_VERSION == AOMDV
+        //Whenever node i sends request update advertised hop to d
+        rt.update_advertise_hop();
+        #endif
      }
    else
      {
        sseq_known_reply = 1;
-       RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       #if ACTIVE_VERSION == AOMDV
+       //For AOMDV MAKE INITIAL HOP BE NET_DIAMETER
+        RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,m_sequence,NET_DIAMETER,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       #elif ACTIVE_VERSION == AODV
+        RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       #endif
        // Check if TtlStart == NetDiameter
        if (ttl == NET_DIAMETER)
          {
@@ -385,6 +407,10 @@ void send_rreq(uint8_t dest)
          }
        newEntry.SetFlag (IN_SEARCH);
        m_routing_table.AddRoute (newEntry,0);
+        #if ACTIVE_VERSION == AOMDV
+        //Whenever node i sends request update advertised hop to d
+        newEntry.update_advertise_hop();
+        #endif
      }
      
    update_node_seq(1,1);
@@ -399,7 +425,11 @@ void send_rreq(uint8_t dest)
     for (int i = 0;i<current_neighbours.size();i++)
     {
        logInfo ("Sending RREQ");
-       send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0);
+       #if ACTIVE_VERSION == AOMDV
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress);//I know first neighbours from origin so format packet according
+       #elif ACTIVE_VERSION == AODV
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0);
+       #endif
        }
     } 
  
@@ -750,6 +780,208 @@ void ProcessHello(std::vector<uint8_t> packet)
      }
     myNeighbour.Print();
     }
+
+
+#if ACTIVE_VERSION == AOMDV //Redfine for AOMDV
+
+void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
+{
+   logInfo("Received an RREQ AOMDV mode");
+  std::vector<RouteEntity> route_list;
+   uint8_t id = packet.at(RREQ_PACKET_RREQ_ID);
+   uint8_t origin = packet.at(RREQ_PACKET_ORIGIN_IP);
+    //During RREQ AOMDV does not drop packets. Instead it keeps a list of source neighbours that RREQ came from
+    //TODO must the list be reset during retry?
+    if (firsthop_list.empty())
+    {
+        //Nothing in it so fill up with first entry
+        std::vector<uint8_t> holder;
+        holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+        firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+    }
+    else 
+    {
+        //See if already in the list of neighbours
+        auto element=firsthop_list.find(packet.at(RREQ_PACKET_ORIGIN_IP));
+        if (element->first == packet.at(RREQ_PACKET_ORIGIN_IP))
+        {
+            //destination has been found update the addresses that has been received from
+            element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+        }
+        else {
+            //destination not been found add it to the queue
+            std::vector<uint8_t> holder;
+            holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+            firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+        }
+    }
+  
+   // Increment RREQ hop count
+   uint8_t hop = packet.at(RREQ_PACKET_HOP_COUNT) + 1;
+   uint8_t hop_rrep = hop;
+   packet.at(RREQ_PACKET_HOP_COUNT) = hop_rrep;
+  
+   /*
+    *  When the reverse route is created or updated, the following actions on the route are also carried out:
+    *  1. the Originator Sequence Number from the RREQ is compared to the corresponding destination sequence number
+    *     in the route table entry and copied if greater than the existing value there
+    *  2. the valid sequence number field is set to true;
+    *  3. the next hop in the routing table becomes the node from which the  RREQ was received
+    *  4. the hop count is copied from the Hop Count in the RREQ message;
+    *  5. the Lifetime is set to be the maximum of (ExistingLifetime, MinimalLifetime), where
+    *     MinimalLifetime = current time + 2*NetTraversalTime - 2*HopCount*NodeTraversalTime
+    */
+   RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   
+   if (!m_routing_table.LookupRoute (origin, toOrigin))
+     {
+       
+       RoutingTableEntry newEntry =RoutingTableEntry( /*dst=*/ origin,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ 255,route_list,  /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, device_ip_address);
+       RouteEntity newEntity = RouteEntity(source,hop);
+        newEntry.SetValidSeqNo(true);
+        newEntry.addRoutingEntity(newEntity);
+        newEntry.update_advertise_hop();
+        newEntry.update_LoRa_path();
+       m_routing_table.AddRoute (newEntry,0);
+     }
+   else
+     {
+       if (toOrigin.GetValidSeqNo ())
+         {
+           if (int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) > 0)
+             {
+               toOrigin.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+             }
+         }
+       else
+         {
+           toOrigin.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+         }
+       toOrigin.SetValidSeqNo (true);
+       //TODO do the right AOMDV way
+       toOrigin.SetNextHop (source);
+       toOrigin.SetHop (hop);
+       if (ACTIVE_ROUTE_TIMEOUT+clock()>=toOrigin.GetLifeTime ())
+       {
+           toOrigin.SetLifeTime (ACTIVE_ROUTE_TIMEOUT);
+           }
+        else
+        {
+            toOrigin.SetLifeTime (toOrigin.GetLifeTime ()-clock());
+            }
+       m_routing_table.Update (toOrigin);
+       myNeighbour.Update (source,CLOCKS_PER_SEC/1000*ALLOWED_HELLO_LOSS*HELLO_INTERVAL);
+     }
+  
+  
+   RoutingTableEntry toNeighbor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,ACTIVE_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   if (!m_routing_table.LookupRoute (source, toNeighbor))
+     {
+       logInfo ("Neighbor: not found in routing table. Creating an entry");
+       
+       RoutingTableEntry newEntry  = RoutingTableEntry( /*dst=*/ source,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ 1, route_list, /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, device_ip_address);
+       RouteEntity newEntity = RouteEntity(source,1);
+       newEntry.addRoutingEntity(newEntity);
+       newEntry.SetNextHop(packet.at(RREQ_SENDER));
+       m_routing_table.AddRoute (newEntry,0);
+     }
+   else
+     {
+       toNeighbor.SetLifeTime (MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000);
+       toNeighbor.SetValidSeqNo (false);
+       toNeighbor.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+       toNeighbor.SetFlag (VALID);
+       toNeighbor.SetHop (1);
+       toNeighbor.SetNextHop (source);
+       m_routing_table.Update (toNeighbor);
+     }
+     
+   myNeighbour.Update (origin, HELLO_TIME_OUT*CLOCKS_PER_SEC/1000);
+//  
+//   NS_LOG_LOGIC (receiver << " receive RREQ with hop count " << static_cast<uint32_t> (rreqHeader.GetHopCount ())
+//                          << " ID " << rreqHeader.GetId ()
+//                          << " to destination " << rreqHeader.GetDst ());
+  
+   //  A node generates a RREP if either:
+   //  (i)  it is itself the destination,
+   if (packet.at(RREQ_PACKET_DESTINATION_IP)==device_ip_address)
+     {
+       m_routing_table.LookupRoute (origin, toOrigin);
+       logInfo ("Send reply since I am the destination");
+       SendReply (packet, toOrigin);
+       return;
+     }
+   /*
+    * (ii) or it has an active route to the destination, the destination sequence number in the node's existing route table entry for the destination
+    *      is valid and greater than or equal to the Destination Sequence Number of the RREQ, and the "destination only" flag is NOT set.
+    */
+   RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   uint8_t dst = packet.at(RREQ_PACKET_DESTINATION_IP);
+   
+   if (m_routing_table.LookupRoute (dst, toDst))
+     {
+       /*
+        * Drop RREQ, This node RREP will make a loop.
+        */
+       if (toDst.GetNextHop (0) == origin)
+         {
+           logInfo("This packet is me so make loop so drop it");
+           return;
+         }
+       /*
+        * The Destination Sequence number for the requested destination is set to the maximum of the corresponding value
+        * received in the RREQ message, and the destination sequence value currently maintained by the node for the requested destination.
+        * However, the forwarding node MUST NOT modify its maintained value for the destination sequence number, even if the value
+        * received in the incoming RREQ is larger than the value currently maintained by the forwarding node.
+        */
+       if (( (packet.at(RREQ_PACKET_UNKOWN_SEQ)==1) || (int8_t (toDst.GetSeqNo ()) - int8_t (packet.at(RREQ_PACKET_DESTINATION_SEQ)) >= 0))
+           && toDst.GetValidSeqNo () )
+         {
+           //if (!rreqHeader.GetDestinationOnly () && toDst.GetFlag () == VALID)
+           if (toDst.GetFlag () == VALID)
+             {
+               m_routing_table.LookupRoute (origin, toOrigin);
+               //Create this function
+               logInfo("Sending route by intermediate node");
+
+               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G));
+               return;
+             }
+            
+           uint8_t seq_rrep = toDst.GetSeqNo ();
+           uint8_t seq_known_rrep = 0;
+           packet.at(RREQ_PACKET_DESTINATION_SEQ) = seq_rrep;
+           packet.at(RREQ_PACKET_UNKOWN_SEQ) = seq_known_rrep;
+         }
+     }
+   if (packet.at(RREQ_PACKET_TTL) < 2)
+     {
+       logDebug ("TTL exceeded. Drop RREQ origin " );
+       return;
+     }
+    
+    // //Schedule a wait thing to wait to RREQ again depedning on repeats.
+    // ScheduleRreqRetry (dst);
+  //JUST SENDING AN RREQ AGAIN I GUESS
+    packet.at(RREQ_PACKET_TTL) = packet.at(RREQ_PACKET_TTL) - 1; 
+    //change RREQ source to this address
+    packet.at(RREQ_SENDER) = device_ip_address;
+    //Sending RREQ to every known neighbour
+    std::vector<Neighbors::Neighbor> current_neighbours = myNeighbour.getListNeighbours();
+    for (int i = 0;i<current_neighbours.size();i++)
+    {
+       //DOnt want it to needlessly go back to origin
+       if (current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_PACKET_ORIGIN_IP))
+       {
+           packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
+           send_data(packet);
+           }
+       
+       }
+    } 
+
+#elif ACTIVE_VERSION == AODV
+
 void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
 {
    logInfo("Received an RREQ");
@@ -767,8 +999,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
   
    uint8_t id = packet.at(RREQ_PACKET_RREQ_ID);
    uint8_t origin = packet.at(RREQ_PACKET_ORIGIN_IP);
-  
-   /*
+    /*
     *  Node checks to determine whether it has received a RREQ with the same Originator IP Address and RREQ ID.
     *  If such a RREQ has been received, the node silently discards the newly received RREQ.
     */
@@ -904,6 +1135,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                m_routing_table.LookupRoute (origin, toOrigin);
                //Create this function
                logInfo("Sending route by intermediate node");
+
                SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G));
                return;
              }
@@ -938,7 +1170,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
            }
        
        }
-    }  
+    } 
+
+#endif
+ 
     
 void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
 {
@@ -1418,7 +1653,60 @@ void message_queue_handler(void)
 //      Route Error (RERR)              3
 //      Route-Reply Ack (RREP-ACK)      4
       
-      
+
+#if ACTIVE_VERSION == AOMDV //Redefinition for AOMDV
+
+int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source) {
+// FORMAT OF RREQ MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
+//      0                   1                   2                   3
+//    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |     Type      |                                   Hop Count   |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                            RREQ ID                            |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                    Destination IP Address                     |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                  Destination Sequence Number                  |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                    Originator IP Address                      |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                  Originator Sequence Number                   |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                            IS Seq valid                            |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                            SHould send response                            |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                    TTL                      |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//   |                    acknowledge the reply                      |
+//   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    std::vector<uint8_t> output;
+    uint8_t type = 1;
+    //INsert the data into the packet
+    output.push_back(type);
+    output.push_back(recipient_address);
+    output.push_back(sender_address);
+    output.push_back(hop_count);
+    output.push_back(rreq_id);
+    output.push_back(destination_add);
+    output.push_back(dest_seq_num);
+    output.push_back(source_add);
+    output.push_back(origin_seq_num);
+    output.push_back(seq_valid);
+    output.push_back(g);
+    output.push_back(m_ttl);
+    output.push_back(r_ack);
+    output.push_back(neighbour_source);
+    //wait for the radio to be done
+    wait_on_radio();
+    return send_data(output);
+    
+    
+    }
+
+#elif ACTIVE_VERSION == AODV
+
 int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack) {
 // FORMAT OF RREQ MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
@@ -1467,6 +1755,8 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
     
     }
 
+#endif      
+
 int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack) {
 // FORMAT OF RREP MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
@@ -1509,6 +1799,7 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     
     
     }
+
 int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount , uint8_t ttl, std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq)
 {
 //        0                   1                   2                   3
@@ -1756,8 +2047,6 @@ void Hallo_Timer_Expire()
         }    
         wait_on_radio();
         SendHallo();
-        //send_rreq(destination_ip_address);
-
     }
 
     void QueueRouteRequestTimerExpire()
