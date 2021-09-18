@@ -8,7 +8,10 @@
 //NB GetHop is the same as get advertised hop
 //NB SetHop is the same as set advertised hop
 //NB To Look For AOMDV specific things simply CTRL+F and search ACTIVE_VERSION
+//TODO check if my neighbour table works with my hallo timer properly
+
 #include "main.h"
+#include <algorithm>
 #include <ctime>
 #include <iostream>
 #include <string>
@@ -290,6 +293,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin)
     //Sends the RREP now
     //send_rrep( toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl);
     wait_on_radio();
+    //TODO fix uint8_t conversionerror
     send_rrep(toOrigin.GetNextHop (0),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0);
     }
     
@@ -806,7 +810,15 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
         if (element->first == packet.at(RREQ_PACKET_ORIGIN_IP))
         {
             //destination has been found update the addresses that has been received from
-            element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+            //First see if ORIGIN_NEIGH packet has been received'
+            if (std::find(element->second.begin(), element->second.end(), packet.at(RREQ_PACKET_ORIGIN_NEIGH))!=element->second.end())
+            {
+                //This RREQ has been received so just drop
+                return;
+            }
+            else {
+                element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));//add address to the list
+            }
         }
         else {
             //destination not been found add it to the queue
@@ -836,7 +848,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
    if (!m_routing_table.LookupRoute (origin, toOrigin))
      {
        
-       RoutingTableEntry newEntry =RoutingTableEntry( /*dst=*/ origin,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ 255,route_list,  /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, device_ip_address);
+       RoutingTableEntry newEntry =RoutingTableEntry( /*dst=*/ origin,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ hop,route_list,  /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, device_ip_address);
        RouteEntity newEntity = RouteEntity(source,hop);
         newEntry.SetValidSeqNo(true);
         newEntry.addRoutingEntity(newEntity);
@@ -851,24 +863,43 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
            if (int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) > 0)
              {
                toOrigin.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+               //Here is the unique AOMDV for finding path backwards
+               if (device_ip_address!=packet.at(RREQ_PACKET_DESTINATION_IP))
+               {
+                   //This is not the origin
+                   toOrigin.SetHop(255); //Set to infinity
+                   toOrigin.clear_route_list(); //Route list = NULL
+                   RouteEntity newEntity = RouteEntity(source,hop); //Insert this into the route list
+                   toOrigin.addRoutingEntity(newEntity);
+               }
+               else {
+                   toOrigin.SetHop(0); //add hop count is 0
+               }
              }
+            else if ((int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) == 0) && (toOrigin.GetHop()>=packet.at(RREQ_PACKET_HOP_COUNT)) ) {
+            //Second case NB modified it so it is less strict than pure AOMDV
+                RouteEntity newEntity = RouteEntity(source,hop); //Insert this into the route list
+                toOrigin.addRoutingEntity(newEntity);
+            }
          }
        else
          {
-           toOrigin.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+             //Treat this as when a fresher sequence number came
+                toOrigin.SetSeqNo (packet.at(RREQ_PACKET_ORIGIN_SEQ));
+               //Here is the unique AOMDV for finding path backwards
+               if (device_ip_address!=packet.at(RREQ_PACKET_DESTINATION_IP))
+               {
+                   //This is not the origin
+                   toOrigin.SetHop(255); //Set to infinity
+                   toOrigin.clear_route_list(); //Route list = NULL
+                   RouteEntity newEntity = RouteEntity(source,hop); //Insert this into the route list
+                   toOrigin.addRoutingEntity(newEntity);
+               }
+               else {
+                   toOrigin.SetHop(0); //add hop count is 0
+               }
          }
        toOrigin.SetValidSeqNo (true);
-       //TODO do the right AOMDV way
-       toOrigin.SetNextHop (source);
-       toOrigin.SetHop (hop);
-       if (ACTIVE_ROUTE_TIMEOUT+clock()>=toOrigin.GetLifeTime ())
-       {
-           toOrigin.SetLifeTime (ACTIVE_ROUTE_TIMEOUT);
-           }
-        else
-        {
-            toOrigin.SetLifeTime (toOrigin.GetLifeTime ()-clock());
-            }
        m_routing_table.Update (toOrigin);
        myNeighbour.Update (source,CLOCKS_PER_SEC/1000*ALLOWED_HELLO_LOSS*HELLO_INTERVAL);
      }
@@ -923,7 +954,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        /*
         * Drop RREQ, This node RREP will make a loop.
         */
-       if (toDst.GetNextHop (0) == origin)
+       if (toDst.GetNextHop (0) == source)
          {
            logInfo("This packet is me so make loop so drop it");
            return;

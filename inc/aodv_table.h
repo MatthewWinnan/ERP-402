@@ -84,6 +84,11 @@ public:
 
     #if ACTIVE_VERSION==AOMDV
 
+    void clear_route_list()
+    {
+        m_route_list.clear();
+    }
+
     void update_advertise_hop()
     {
         //On every sequence number update the advertised hopcount
