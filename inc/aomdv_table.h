@@ -28,22 +28,35 @@ enum RouteFlags
 class RouteEntity
 {
 public:
-    RouteEntity(uint8_t next, uint8_t hop);
+    RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s);
     ~RouteEntity();
 
-    uint8_t get_next_hop() const;
+    uint8_t get_next_hop();
     uint8_t get_hopcount();
+    uint8_t get_neighbour_source();
     RouteFlags get_status() const;
 
     void set_next_hop(uint8_t next);
     void set_hopcount(uint8_t  hop);
+    void set_neighbour_source(uint8_t n_s);
     void set_status (RouteFlags sts);
+
+        //\{
+    bool InsertPrecursor (uint8_t id);
+    bool LookupPrecursor (uint8_t id);
+    bool DeletePrecursor (uint8_t id);
+    void DeleteAllPrecursors ();
+    bool IsPrecursorListEmpty () const;
+    void GetPrecursors (std::vector<uint8_t> prec) const;
+    //\}
 
 private:
 
     uint8_t next_hop;
     uint8_t hopcount;
+    uint8_t neighbour_source;
     RouteFlags status;
+    std::vector<uint8_t> m_precursorList;
 
 };
 
@@ -60,7 +73,6 @@ private:
     RouteFlags m_flag;
     clock_t m_routeRequestTimout;
     std::vector<RouteEntity> m_route_list;
-    std::vector<uint8_t> m_precursorList;
     uint8_t m_reqCount;
     LoRaRoute m_LoRa_route; //defines current selected route
 
@@ -69,14 +81,6 @@ public:
 
     ~RoutingTableEntry ();
 
-    //\{
-    bool InsertPrecursor (uint8_t id);
-    bool LookupPrecursor (uint8_t id);
-    bool DeletePrecursor (uint8_t id);
-    void DeleteAllPrecursors ();
-    bool IsPrecursorListEmpty () const;
-    void GetPrecursors (std::vector<uint8_t> prec) const;
-    //\}
 
     /////////////////////////////////////////////////////////
     ///AOVDM SPECIFIC FUNCTIONS ///////////////////////////
@@ -122,6 +126,7 @@ public:
             }
         }         
     }
+
 ///////////////////////////////////////////////
     void setRouteList(std::vector<RouteEntity> route_list)
     {

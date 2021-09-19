@@ -10,3 +10,4 @@ tool that has a natural load balancing scheme as it takes ETA, packet overhead, 
 acceptable QoS. This also seems to minimize energy costs which if a node has a high load I am expecting the energy cost to deleiver a packet to go up. Currently I don't have to paper I 
 have applied for permission to receive it since the library doesn't have access to it.
 
+1) Done with send_rreq

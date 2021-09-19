@@ -2,10 +2,11 @@
 #include <iostream>
 
 #if ACTIVE_VERSION == AOMDV
-  RouteEntity::RouteEntity(uint8_t next, uint8_t hop) {
+  RouteEntity::RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s) {
 
      next_hop = next;
      hopcount = hop;
+     neighbour_source = n_s;
 
 }
 
@@ -13,12 +14,17 @@ RouteEntity::~RouteEntity() {
 
 }
 
-uint8_t RouteEntity::get_next_hop() const {
+uint8_t RouteEntity::get_next_hop() {
     return next_hop;
 }
 
 uint8_t RouteEntity::get_hopcount() {
     return hopcount;
+}
+
+uint8_t RouteEntity::get_neighbour_source()
+{
+    return neighbour_source;
 }
 
 void RouteEntity::set_next_hop(uint8_t next) {
@@ -29,12 +35,97 @@ void RouteEntity::set_hopcount(uint8_t hop) {
 hopcount = hop;
 }
 
+void RouteEntity::set_neighbour_source(uint8_t n_s)
+{
+    neighbour_source = n_s;
+}
+
 RouteFlags RouteEntity::get_status() const {
     return status;
 }
 
 void RouteEntity::set_status(RouteFlags sts) {
 status = sts;
+}
+
+bool RouteEntity::InsertPrecursor(uint8_t id) {
+    if (!LookupPrecursor (id))
+    {
+        m_precursorList.push_back (id);
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+bool RouteEntity::LookupPrecursor(uint8_t id) {
+    for (std::vector<uint8_t>::const_iterator i = m_precursorList.begin (); i!= m_precursorList.end (); ++i)
+    {
+        if (*i == id)
+        {
+//            logInfo ("Precursor " << id << " found");
+            std::cout << "Precursor" << id << " found"<< std::endl;
+            return true;
+        }
+    }
+//    logInfo ("Precursor " << id << " not found");
+    std::cout << "Precursor" << id << " not found"<< std::endl;
+    return false;
+}
+
+bool RouteEntity::DeletePrecursor(uint8_t id) {
+    std::vector<uint8_t>::iterator i = std::remove (m_precursorList.begin (),
+                                                    m_precursorList.end (), id);
+    if (i == m_precursorList.end ())
+    {
+//        logInfo ("Precursor " << id << " not found");
+        std::cout << "Precursor" << id << " not found"<< std::endl;
+        return false;
+    }
+    else
+    {
+//        logInfo ("Precursor " << id << " found");
+        std::cout << "Precursor" << id << " found"<< std::endl;
+        m_precursorList.erase (i, m_precursorList.end ());
+    }
+    return true;
+}
+
+void RouteEntity::DeleteAllPrecursors() {
+//    logInfo ("Clearing all precursors");
+    std::cout << "Clearing all Precursor"<< std::endl;
+    m_precursorList.clear ();
+}
+
+bool RouteEntity::IsPrecursorListEmpty() const {
+    return m_precursorList.empty ();
+}
+
+//Inserts precursors in output parameter prec if they do not yet exist in vector.
+void RouteEntity::GetPrecursors(std::vector<uint8_t> prec) const {
+    if (IsPrecursorListEmpty ())
+    {
+        return;
+    }
+    for (std::vector<uint8_t>::const_iterator i = m_precursorList.begin (); i
+                                                                            != m_precursorList.end (); ++i)
+    {
+        bool result = true;
+        for (std::vector<uint8_t>::const_iterator j = prec.begin (); j
+                                                                     != prec.end (); ++j)
+        {
+            if (*j == *i)
+            {
+                result = false;
+            }
+        }
+        if (result)
+        {
+            prec.push_back (*i);
+        }
+    }
 }
 
 
@@ -68,86 +159,6 @@ RoutingTableEntry::RoutingTableEntry(uint8_t dst, uint8_t seqNo, uint8_t adverti
 
 RoutingTableEntry::~RoutingTableEntry() {
 
-}
-
-bool RoutingTableEntry::InsertPrecursor(uint8_t id) {
-    if (!LookupPrecursor (id))
-    {
-        m_precursorList.push_back (id);
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-bool RoutingTableEntry::LookupPrecursor(uint8_t id) {
-    for (std::vector<uint8_t>::const_iterator i = m_precursorList.begin (); i!= m_precursorList.end (); ++i)
-    {
-        if (*i == id)
-        {
-//            logInfo ("Precursor " << id << " found");
-            std::cout << "Precursor" << id << " found"<< std::endl;
-            return true;
-        }
-    }
-//    logInfo ("Precursor " << id << " not found");
-    std::cout << "Precursor" << id << " not found"<< std::endl;
-    return false;
-}
-
-bool RoutingTableEntry::DeletePrecursor(uint8_t id) {
-    std::vector<uint8_t>::iterator i = std::remove (m_precursorList.begin (),
-                                                    m_precursorList.end (), id);
-    if (i == m_precursorList.end ())
-    {
-//        logInfo ("Precursor " << id << " not found");
-        std::cout << "Precursor" << id << " not found"<< std::endl;
-        return false;
-    }
-    else
-    {
-//        logInfo ("Precursor " << id << " found");
-        std::cout << "Precursor" << id << " found"<< std::endl;
-        m_precursorList.erase (i, m_precursorList.end ());
-    }
-    return true;
-}
-
-void RoutingTableEntry::DeleteAllPrecursors() {
-//    logInfo ("Clearing all precursors");
-    std::cout << "Clearing all Precursor"<< std::endl;
-    m_precursorList.clear ();
-}
-
-bool RoutingTableEntry::IsPrecursorListEmpty() const {
-    return m_precursorList.empty ();
-}
-
-//Inserts precursors in output parameter prec if they do not yet exist in vector.
-void RoutingTableEntry::GetPrecursors(std::vector<uint8_t> prec) const {
-    if (IsPrecursorListEmpty ())
-    {
-        return;
-    }
-    for (std::vector<uint8_t>::const_iterator i = m_precursorList.begin (); i
-                                                                            != m_precursorList.end (); ++i)
-    {
-        bool result = true;
-        for (std::vector<uint8_t>::const_iterator j = prec.begin (); j
-                                                                     != prec.end (); ++j)
-        {
-            if (*j == *i)
-            {
-                result = false;
-            }
-        }
-        if (result)
-        {
-            prec.push_back (*i);
-        }
-    }
 }
 
 void RoutingTableEntry::Invalidate(clock_t badLinkLifetime , uint8_t index) {
