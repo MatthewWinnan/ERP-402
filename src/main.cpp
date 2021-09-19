@@ -1002,7 +1002,8 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
     for (int i = 0;i<current_neighbours.size();i++)
     {
        //DOnt want it to needlessly go back to origin
-       if (current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_PACKET_ORIGIN_IP))
+       //Also don't want it to be needlessly sent back to source else it will make loop
+       if ((current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_PACKET_ORIGIN_IP)) && (current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_SENDER)))
        {
            packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
            send_data(packet);
