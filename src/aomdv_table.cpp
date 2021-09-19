@@ -14,7 +14,7 @@ RouteEntity::~RouteEntity() {
 
 }
 
-uint8_t RouteEntity::get_next_hop() {
+uint8_t RouteEntity::get_next_hop() const{
     return next_hop;
 }
 
@@ -22,7 +22,7 @@ uint8_t RouteEntity::get_hopcount() {
     return hopcount;
 }
 
-uint8_t RouteEntity::get_neighbour_source()
+uint8_t RouteEntity::get_neighbour_source() const
 {
     return neighbour_source;
 }
@@ -289,7 +289,7 @@ void RoutingTable::GetListOfDestinationWithNextHop(uint8_t nextHop, std::map<uin
             m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
     {
         for (int j = 0; j<i->second.getRouteList().size();j++)
-        if (i->second.GetNextHop (j) == nextHop)
+        if (i->second.getRouteList().at(j).get_next_hop() == nextHop)
         {
             unreachable.insert (std::make_pair (i->first, i->second.GetSeqNo ()));
         }
@@ -364,8 +364,13 @@ void RoutingTable::Print()  {
         std::cout<<"Destination :"<<i->first<<" has a INVALID path"<<endl;
         }
         //TODO print all paths in entry
-        std::cout<<"Next hop: "<<i->second.GetNextHop(0)<<endl;
-        std::cout<<"Hop Count: "<<i->second.GetHop()<<endl;
+        std::cout<<"The following routes are known for the destination"<<endl;
+        for (int j = 0; j<i->second.getRouteList().size();j++)
+            {
+                std::cout<<"Next hop "<<i->second.getRouteList().at(j).get_next_hop()
+                <<" with hop count "<<i->second.getRouteList().at(j).get_hopcount()<<" advertised by neighbour "<<i->second.getRouteList().at(j).get_neighbour_source()<<endl;
+            }
+        std::cout<<"Advertised Hop Count: "<<i->second.GetHop()<<endl;
         std::cout<<"Sequence number: "<<i->second.GetSeqNo()<<endl;
 
     }

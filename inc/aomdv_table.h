@@ -31,9 +31,9 @@ public:
     RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s);
     ~RouteEntity();
 
-    uint8_t get_next_hop();
+    uint8_t get_next_hop() const;
     uint8_t get_hopcount();
-    uint8_t get_neighbour_source();
+    uint8_t get_neighbour_source() const;
     RouteFlags get_status() const;
 
     void set_next_hop(uint8_t next);
@@ -85,6 +85,18 @@ public:
     /////////////////////////////////////////////////////////
     ///AOVDM SPECIFIC FUNCTIONS ///////////////////////////
     ///////////////////////////////////////////////////////
+    std::vector<RouteEntity> get_entity_with_neigh_source(uint8_t neighbour_address)
+    {
+       std::vector<RouteEntity> output;
+       for(int i=0;i<m_route_list.size();i++)
+       {
+           if(m_route_list.at(i).get_neighbour_source()==neighbour_address)
+           {
+               output.push_back(m_route_list.at(i));
+           }
+       } 
+       return output;
+    }
 
     void clear_route_list()
     {
@@ -196,52 +208,24 @@ public:
         }
     
 
-    void SetNextHop (uint8_t nextHop)
+    void SetNextHop ()
     {
-        std::cout<<"Next hop being set to "<<nextHop<<endl;
-        RouteEntity holder = RouteEntity( nextHop,  1);
-        if (m_route_list.size()>0)
-        {
-         for (int i = 0; i<m_route_list.size(); i++)
-         {
-            if( m_route_list.at(i).get_next_hop()==nextHop)
-            {
-                std::cout<<"Hop "<<holder.get_next_hop()<<" exhists in line 157"<<endl;
-                return;
-                }
-            
-            }   
-            std::cout<<"Pushing back "<<holder.get_next_hop()<<" in line 161"<<endl;
-            m_route_list.push_back(holder);
-            }
-            else
-            {
-                std::cout<<"Pushing back "<<holder.get_next_hop()<<" in line 166"<<endl;
-                m_route_list.push_back(holder);
-                }
-        //Assuming made here it is new hop look at smallest hop best
-        m_LoRa_route.SetNextHop(m_route_list.front().get_next_hop());
-        for (int i = 1; i<m_route_list.size(); i++)
-         {
-          if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
-          {
-            //This is smaller so make this next hop
-            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
-            m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
-            }
-        }  
+        //AOMDV changed so the next hop is merely updated
+        update_LoRa_path();
     }
 
-    uint8_t GetNextHop (uint8_t index) const
+    std::vector<uint8_t> GetNextHop (uint8_t neighbour_address) const
     {
-        if (m_route_list.size()>index)
+        //AOMDV now gives a vector of next hops
+        std::vector<uint8_t> output;
+        for (std::vector<RouteEntity>::const_iterator i = m_route_list.begin (); i!= m_route_list.end ();i++ )
         {
-            std::cout<<"Next hop being returned is  "<<m_route_list.at(index).get_next_hop()<<endl;
-         return  m_route_list.at(index).get_next_hop();   
+            if (i->get_neighbour_source() == neighbour_address)
+            {
+                output.push_back(i->get_next_hop());
             }
-        std::cout<<"No entries exist"<<endl;
-        return 0;
-        
+        }
+        return output;
     }
 
     void SetValidSeqNo (bool s)
