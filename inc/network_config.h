@@ -24,7 +24,7 @@
 
 //Select the current protocol version
 #if !defined(ACTIVE_VERSION)
-#define ACTIVE_VERSION  AODV
+#define ACTIVE_VERSION  AOMDV
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS
@@ -185,6 +185,7 @@ typedef enum {
 #if ACTIVE_VERSION==AOMDV
 #define RREQ_PACKET_ORIGIN_NEIGH 13
 #define RREP_PACKET_ORIGIN_NEIGH 11
+#define K_REPEATS 3
 #endif
 
 

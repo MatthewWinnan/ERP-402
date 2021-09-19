@@ -91,7 +91,11 @@ Thread main_thread; //Thread that handles the queue
 //Origin ID     list of neighbours that RREQ has been received from
 std::map<uint8_t, std::vector<uint8_t>> firsthop_list; //list of neighbour nodes of origin from which RREQ has been received.
 
-//KEY           VALUE
+//KEY               VALUE
+//Neighbour ID     amount of times received from neighbour
+std::map<uint8_t, uint8_t> firsthop_counter;
+
+//KEY               VALUE
 //Neighbour ID     list of nodes a unique neighbour ID came from
 std::map<uint8_t, std::vector<uint8_t>> neighbour_source_list;
 

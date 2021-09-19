@@ -794,8 +794,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
   std::vector<RouteEntity> route_list;
    uint8_t id = packet.at(RREQ_PACKET_RREQ_ID);
    uint8_t origin = packet.at(RREQ_PACKET_ORIGIN_IP);
+   #if ACTIVE_USER == CLIENT_NODE || ACTIVE_USER == ROUTING_NODE
     //During RREQ AOMDV does not drop packets. Instead it keeps a list of source neighbours that RREQ came from
     //TODO must the list be reset during retry?
+    //Also this holds only for every other route. Destination replies and sees every unique one 
     if (firsthop_list.empty())
     {
         //Nothing in it so fill up with first entry
@@ -840,7 +842,6 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                 {
                     //At the start I always add a firsthop entry and neigh source entry this can't happen
                     std::cout<<"Error at entering new source into neighbour add list"<<endl;
-
                 }
 
             }
@@ -860,9 +861,69 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             //Also keep track of the source the nighbour came from
             std::vector<uint8_t> neigh_holder;
             neigh_holder.push_back(packet.at(RREQ_SENDER));
-            firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), neigh_holder));
+            neighbour_source_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), neigh_holder));
         }
     }
+   #elif ACTIVE_USER == DESTINATION_NODE
+    //Here looser packet entry restrictions are passed since this is destination node
+    //Only setup route back if hops smaller or same as advertise routing
+    if (firsthop_list.empty())
+    {
+        //Nothing in it so fill up with first entry
+        std::vector<uint8_t> holder;
+        holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+        firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+        //Keep track of amount of RREQ received if below K
+        firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+    }
+    else 
+    {
+        //See if already in the list of neighbours
+        auto element=firsthop_list.find(packet.at(RREQ_PACKET_ORIGIN_IP));
+        if (element->first == packet.at(RREQ_PACKET_ORIGIN_IP))
+        {
+            //destination has been found update the addresses that has been received from
+            //First see if ORIGIN_NEIGH packet has been received'
+            if (std::find(element->second.begin(), element->second.end(), packet.at(RREQ_PACKET_ORIGIN_NEIGH))!=element->second.end())
+            {
+                //check if the amount received from this neighbour is smaller
+                //First find the entry in the counter list
+                auto element_counter=firsthop_counter.find(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+                if (element_counter->first == packet.at(RREQ_PACKET_ORIGIN_NEIGH))
+                {
+                    //found it
+                    if (element_counter->second>K_REPEATS)
+                    {
+                        return;//count too high drop
+                    }
+                    else  
+                    {
+                        element_counter->second++; //increment the amount found
+                    }
+                }
+                else 
+                {
+                    std::cout<<"Error when trying to increase k count"<<endl;
+                }
+            }
+            else {
+                element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));//add address to the list
+                //This is a new neighbour so add new entry to the source tracking list
+                //Keep track of amount of RREQ received if below K
+                firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+            }
+        }
+        else {
+            //destination not been found add it to the queue
+            std::vector<uint8_t> holder;
+            holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+            firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+            //Keep track of amount of RREQ received if below K
+            firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+        }
+    }
+   #endif
+
   
    // Increment RREQ hop count
    uint8_t hop = packet.at(RREQ_PACKET_HOP_COUNT) + 1;
@@ -940,7 +1001,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        myNeighbour.Update (source,CLOCKS_PER_SEC/1000*ALLOWED_HELLO_LOSS*HELLO_INTERVAL);
      }
   
-  
+    //This is fine maintain this to keep routes to potential new destinations
    RoutingTableEntry toNeighbor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,ACTIVE_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
    if (!m_routing_table.LookupRoute (source, toNeighbor))
      {
@@ -973,6 +1034,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
    //  (i)  it is itself the destination,
    if (packet.at(RREQ_PACKET_DESTINATION_IP)==device_ip_address)
      {
+         //Destination sends reply up to k times to
        m_routing_table.LookupRoute (origin, toOrigin);
        logInfo ("Send reply since I am the destination");
        SendReply (packet, toOrigin);
@@ -1030,6 +1092,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
     // //Schedule a wait thing to wait to RREQ again depedning on repeats.
     // ScheduleRreqRetry (dst);
   //JUST SENDING AN RREQ AGAIN I GUESS
+  //TODO update advertise hopcount??
     packet.at(RREQ_PACKET_TTL) = packet.at(RREQ_PACKET_TTL) - 1; 
     //change RREQ source to this address
     packet.at(RREQ_SENDER) = device_ip_address;
