@@ -9,10 +9,20 @@
 #include <vector>
 #include "aodv_neighbours.h"
 #include "aodv_queue.h"
-#include "aodv_table.h"
 #include "network_config.h"
 #include "aodv_id_cache.h"
 #include "lora_route.h"
+
+//Redeclaring which table I will be using
+#if ACTIVE_VERSION == AODV
+
+#include "aodv_table.h"
+
+#elif ACTIVE_VERSION ==  AOMDV
+
+#include "aomdv_table.h"
+
+#endif
 
 ///BIG REMEMBER ALWAYS SEND TIME IN SECONDS AND CONVERT TO TIME WHEN RECEIVED
 ////FINE TO KEEP BIG WHEN IN MEMORY FOR NOW
@@ -80,6 +90,11 @@ Thread main_thread; //Thread that handles the queue
 //KEY           VALUE
 //Origin ID     list of neighbours that RREQ has been received from
 std::map<uint8_t, std::vector<uint8_t>> firsthop_list; //list of neighbour nodes of origin from which RREQ has been received.
+
+//KEY           VALUE
+//Neighbour ID     list of nodes a unique neighbour ID came from
+std::map<uint8_t, std::vector<uint8_t>> neighbour_source_list;
+
 #endif
 ///////////////////////////////////////////////////////////////////////////////
 //////////MAIN FUNCTIONS//////////////////////////////////////////////////////

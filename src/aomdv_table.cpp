@@ -1,8 +1,7 @@
-#include "aodv_table.h"
-
+#include "aomdv_table.h"
 #include <iostream>
 
-#if ACTIVE_VERSION == AODV
+#if ACTIVE_VERSION == AOMDV
   RouteEntity::RouteEntity(uint8_t next, uint8_t hop) {
 
      next_hop = next;
@@ -395,7 +394,4 @@ void RoutingTable::Purge(std::map<uint8_t, RoutingTableEntry> &table) const {
         }
     }
 }
-
 #endif
-  
- 

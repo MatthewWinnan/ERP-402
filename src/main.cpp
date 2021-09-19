@@ -802,6 +802,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
         std::vector<uint8_t> holder;
         holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
         firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+        //Also keep track of the source the nighbour came from
+        std::vector<uint8_t> neigh_holder;
+        neigh_holder.push_back(packet.at(RREQ_SENDER));
+        neighbour_source_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), neigh_holder));
     }
     else 
     {
@@ -813,11 +817,39 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             //First see if ORIGIN_NEIGH packet has been received'
             if (std::find(element->second.begin(), element->second.end(), packet.at(RREQ_PACKET_ORIGIN_NEIGH))!=element->second.end())
             {
-                //This RREQ has been received so just drop
-                return;
+                //This RREQ has been received check if it is a new unique entry in neigh_holder
+                auto neigh_element=neighbour_source_list.find(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+                //First find the key in the map
+                if (element->first == packet.at(RREQ_PACKET_ORIGIN_NEIGH))
+                {
+                    //The key has been found check if the source exhists
+                    if (std::find(neigh_element->second.begin(), neigh_element->second.end(), packet.at(RREQ_SENDER))!=neigh_element->second.end())
+                        {
+                            //Exhists now drop this useless packet
+                            return;
+                        }
+                    else
+                        {
+                            //add to the neighbour source add list
+                            neigh_element->second.push_back(packet.at(RREQ_SENDER));
+                            //This does not stop a packet from entering with a higher hop count if a new source for this add is found
+                            //But during origin update there will be a check to stop this from forming loops
+                        }
+                }
+                else
+                {
+                    //At the start I always add a firsthop entry and neigh source entry this can't happen
+                    std::cout<<"Error at entering new source into neighbour add list"<<endl;
+
+                }
+
             }
             else {
                 element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));//add address to the list
+                //This is a new neighbour so add new entry to the source tracking list
+                std::vector<uint8_t> neigh_holder;
+                neigh_holder.push_back(packet.at(RREQ_SENDER));
+                neighbour_source_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), neigh_holder));
             }
         }
         else {
@@ -825,6 +857,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             std::vector<uint8_t> holder;
             holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
             firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
+            //Also keep track of the source the nighbour came from
+            std::vector<uint8_t> neigh_holder;
+            neigh_holder.push_back(packet.at(RREQ_SENDER));
+            firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), neigh_holder));
         }
     }
   

@@ -1,5 +1,5 @@
-#ifndef AODV_TABLE_H
-#define AODV_TABLE_H
+#ifndef AOMDV_TABLE_H
+#define AOMDV_TABLE_H
 
 #include <stdint.h>
 #include <cassert>
@@ -17,7 +17,7 @@
 #include "MTSText.h"
 #include "network_config.h"
 
-#if ACTIVE_VERSION == AODV 
+#if ACTIVE_VERSION == AOMDV
 enum RouteFlags
 {
     VALID = 0,
@@ -78,6 +78,51 @@ public:
     void GetPrecursors (std::vector<uint8_t> prec) const;
     //\}
 
+    /////////////////////////////////////////////////////////
+    ///AOVDM SPECIFIC FUNCTIONS ///////////////////////////
+    ///////////////////////////////////////////////////////
+
+    void clear_route_list()
+    {
+        m_route_list.clear();
+    }
+
+    void update_advertise_hop()
+    {
+        //On every sequence number update the advertised hopcount
+        uint8_t max_hop = 0;
+        if (m_route_list.empty())
+        {
+            //It is empty so make next hop NET_DIAMETER
+            max_hop = NET_DIAMETER;
+        }
+        else {
+            for (std::vector<RouteEntity>::iterator i =m_route_list.begin (); i != m_route_list.end (); ++i)
+            {
+                if (i->get_hopcount()>max_hop)
+                {
+                    max_hop = i->get_hopcount(); 
+                }
+            }        
+        }
+    m_advertised_hopcount = max_hop;
+    }
+
+    void update_LoRa_path() //Used to update what path sould be chosen. For now forward to path with the smallest hop
+    {
+        //Assuming made here it is new hop look at smallest hop best
+        m_LoRa_route.SetNextHop(m_route_list.front().get_next_hop());
+        for (int i = 1; i<m_route_list.size(); i++)
+         {
+          if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
+          {
+            //This is smaller so make this next hop
+            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
+            m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+            }
+        }         
+    }
+///////////////////////////////////////////////
     void setRouteList(std::vector<RouteEntity> route_list)
     {
         m_route_list = route_list;
