@@ -296,6 +296,24 @@ void RoutingTable::GetListOfDestinationWithNextHop(uint8_t nextHop, std::map<uin
     }
 }
 
+void RoutingTable::GetListOfDestinationWithNextHopAOMDV(uint8_t nextHop, std::map<uint8_t , uint32_t> & unreachable) {
+    Purge ();
+    unreachable.clear ();
+    for (std::map<uint8_t, RoutingTableEntry>::const_iterator i =
+            m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
+    {
+        for (int j = 0; j<i->second.getRouteList().size();j++)
+        if (i->second.getRouteList().at(j).get_next_hop() == nextHop)
+        {
+            if (unreachable.find(i->first)==unreachable.end())
+            {
+                //Key not found so ad to destination with this hop
+                unreachable.insert (std::make_pair (i->first, i->second.GetSeqNo ()));
+            }
+        }
+    }
+}
+
 void RoutingTable::Purge() {
     if (m_LoRaAddressEntry.empty ())
     {

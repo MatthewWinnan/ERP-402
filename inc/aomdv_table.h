@@ -140,6 +140,35 @@ public:
     }
 
 ///////////////////////////////////////////////
+    void getPrecursorsEntry(std::vector<uint8_t> output)
+    {
+        //Gives all precursors as RRER is sent when no other alternative route so then notify all that relies on destination
+        for (int i=0 ;i<m_route_list.size();i++)
+        {
+            if (!m_route_list.at(i).IsPrecursorListEmpty ())
+            {
+            std::vector<uint8_t> holder;
+            m_route_list.at(i).GetPrecursors(holder);
+            for (std::vector<uint8_t>::const_iterator i = holder.begin (); i
+                                                                                    != holder.end (); ++i)
+            {
+                bool result = true;
+                for (std::vector<uint8_t>::const_iterator j = output.begin (); j
+                                                                            != output.end (); ++j)
+                {
+                    if (*j == *i)
+                    {
+                        result = false;
+                    }
+                }
+                if (result)
+                {
+                    output.push_back (*i);
+                }
+            }
+            }
+        }
+    }
     void setRouteList(std::vector<RouteEntity> route_list)
     {
         m_route_list = route_list;
@@ -170,6 +199,36 @@ public:
         {
             return false;
         }
+    }
+
+struct IsNeigh
+{
+    uint8_t neighbor;
+    bool
+    operator() (RouteEntity const & e) const
+    {
+        return (e.get_next_hop()==neighbor);
+    }
+};
+    bool removeSpecificEntity(RouteEntity rid)
+    {
+        IsNeigh pred {rid.get_next_hop()};
+        std::vector<uint8_t> indexing;
+        if (m_route_list.size()==0)
+        {
+            return false;
+        }
+        else 
+        {
+    m_route_list.erase (std::remove_if (m_route_list.begin (), m_route_list.end (), pred),
+                   m_route_list.end ());
+        return true;
+        }
+    }
+
+    bool isRouteListEmpty()
+    {
+        return m_route_list.empty();
     }
     
     // Fields
@@ -214,6 +273,11 @@ public:
         update_LoRa_path();
     }
 
+    uint8_t GetNextLoRaHop()
+    {
+        update_LoRa_path();
+        return m_LoRa_route.GetNextHop();
+    }
     std::vector<uint8_t> GetNextHop (uint8_t neighbour_address) const
     {
         //AOMDV now gives a vector of next hops
@@ -226,6 +290,16 @@ public:
             }
         }
         return output;
+    }
+
+    std::vector<uint8_t> GetEveryHop() 
+    {
+        std::vector<uint8_t> output;
+        for (std::vector<RouteEntity>::const_iterator i = m_route_list.begin (); i!= m_route_list.end ();i++ )
+        {
+            output.push_back(i->get_next_hop());
+        }
+        return output;        
     }
 
     void SetValidSeqNo (bool s)
@@ -315,6 +389,7 @@ public:
     bool Update (RoutingTableEntry & rt);
     bool SetEntryState (uint8_t dst, RouteFlags state);
     void GetListOfDestinationWithNextHop (uint8_t nextHop, std::map<uint8_t, uint32_t> & unreachable);
+    void GetListOfDestinationWithNextHopAOMDV (uint8_t nextHop, std::map<uint8_t, uint32_t> & unreachable);
     void InvalidateRoutesWithDst (std::map<uint8_t, uint32_t> const & unreachable);
     //void InvalidateRoutesWithDst (uint8_t dest);
 //   void DeleteAllRoutesFromInterface (Ipv4InterfaceAddress iface);

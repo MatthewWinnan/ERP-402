@@ -9,6 +9,8 @@
 //NB SetHop is the same as set advertised hop
 //NB To Look For AOMDV specific things simply CTRL+F and search ACTIVE_VERSION
 //TODO check if my neighbour table works with my hallo timer properly
+//NB Routes to Destination is marked with source from where the RREP came from
+//NB Routes to Origin is marked by Origin Neighbour tag
 
 #include "aomdv_main.h"
 
@@ -21,6 +23,9 @@
 #include <string>
 #include <vector>
 
+//KEY               VALUE
+//Neighbour ID     list of sources that RREP came from
+std::map<uint8_t, std::vector<uint8_t>> rrep_firsthop_list;
 
 int main() {
     // Custom event handler for automatically displaying RX data
@@ -277,7 +282,7 @@ void send_reply_ack(uint8_t neighbor_add)
    send_ack(neighbor_add, device_ip_address, 1);
     }
     
-void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin)
+void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source)
 {
     //This stays the same for AOMDV
        logInfo ("Sending a reply back from destination");
@@ -301,7 +306,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin)
     std::vector<uint8_t> hop_list = toOrigin.GetNextHop(packet.at(RREQ_PACKET_ORIGIN_NEIGH)); 
     for (int i = 0;i<hop_list.size();i++)
     {
-        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0); 
+        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source); 
         ThisThread::sleep_for(100ms); //Small gap in sending receiving
         //TODO find out if fine
         //TODO find out if precursor needed
@@ -309,7 +314,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin)
      }
     
 //FOr AOMDV I need to know neighbour of RREQ when sending intermediate reply
-void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source)
+void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src)
 {
        logInfo ("Sending Reply By Intermediate Node");
        //Generate the RREP message parameters
@@ -327,9 +332,9 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
     * probably facing a unidirectional link... Better request a RREP-ack
     */
     std::vector<uint8_t> hop_list_origin = toOrigin.GetNextHop(neighbour_source); 
-    std::vector<uint8_t> hop_list_Dst = toDst.GetNextHop(neighbour_source); 
+    std::vector<uint8_t> hop_list_Dst = toDst.GetNextHop(src); 
     std::vector<RouteEntity> entity_list_origin = toOrigin.get_entity_with_neigh_source(neighbour_source);
-    std::vector<RouteEntity> entity_list_dst = toDst.get_entity_with_neigh_source(neighbour_source);
+    std::vector<RouteEntity> entity_list_dst = toDst.get_entity_with_neigh_source(src);
    if (hops_m == 1)
      {
     //    r_ack_m = 1;
@@ -364,7 +369,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
     for(int j = 0;j<hop_list_origin.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m);
+    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source);
     ThisThread::sleep_for(100ms); //Small gap in sending receiving
         }
   
@@ -383,7 +388,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
            for(int j = 0;j<hop_list_Dst.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g);
+    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source);
     ThisThread::sleep_for(100ms); //Small gap in sending receiving
         }
      }
@@ -467,218 +472,213 @@ void send_rreq(uint8_t dest)//Only client really calls this
  
 void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
 {
-//        logInfo ("Sending RerrWhenNoRouteToForward");
-//        std::vector<RouteEntity> route_list;
-//    // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
-//    if (m_rerrCount == RERR_RATELIMIT)
-//      {
-//        // Just make sure that the RerrRateLimit timer is running and will expire
-//        // discard the packet and return
-//        logInfo("RRER rate limit has been reached");
-//        return;
-//      }
-//     std::vector<uint8_t> m_dest; 
-//     std::vector<uint8_t> m_dest_seq;
-//     m_dest.push_back(dst);
-//     m_dest_seq.push_back(dstSeqNo);
-//    RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//    uint8_t ttl_m = 1;
-//    if (m_routing_table.LookupValidRoute (origin, toOrigin))
-//      {
-//        logDebug ("Unicast RERR to the source of the data transmission No delete flag??");
-//        //send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount, uint8_t ttl std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq)
-//        //socket->SendTo (packet, 0, InetSocketAddress (toOrigin.GetNextHop (), AODV_PORT));
-//        send_rrer(toOrigin.GetNextHop (0), device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
-//      }
-//    else
-//      {
-//          //Broadcast to every neighbour
-//              std::vector<Neighbors::Neighbor> current_neighbours = myNeighbour.getListNeighbours();
-//              for (int i = 0;i<current_neighbours.size();i++)
-//                 {
-//                  send_rrer(current_neighbours.at(i).m_neighborAddress, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
-//                 }
-//      }
+       logInfo ("Sending RerrWhenNoRouteToForward");
+       std::vector<RouteEntity> route_list;
+   // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
+   if (m_rerrCount == RERR_RATELIMIT)
+     {
+       // Just make sure that the RerrRateLimit timer is running and will expire
+       // discard the packet and return
+       logInfo("RRER rate limit has been reached");
+       return;
+     }
+    std::vector<uint8_t> m_dest; 
+    std::vector<uint8_t> m_dest_seq;
+    m_dest.push_back(dst);
+    m_dest_seq.push_back(dstSeqNo);
+   RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   uint8_t ttl_m = 1;
+   if (m_routing_table.LookupValidRoute (origin, toOrigin))
+     {
+       logDebug ("Unicast RERR to the source of the data transmission No delete flag??");
+       //send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount, uint8_t ttl std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq)
+       //socket->SendTo (packet, 0, InetSocketAddress (toOrigin.GetNextHop (), AODV_PORT));
+       //Since no route to destination tell every node back to origin that this node is bad
+       std::vector<uint8_t> list_warning = toOrigin.GetEveryHop();
+       for (std::vector<uint8_t>::iterator i = list_warning.begin (); i!= list_warning.end ();i++ )
+       {
+           send_rrer(*i, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
+           //Wait between no to overload
+           ThisThread::sleep_for(200ms);
+       }
+     }
+   else
+     {
+         //Broadcast to every neighbour
+             std::vector<Neighbors::Neighbor> current_neighbours = myNeighbour.getListNeighbours();
+             for (int i = 0;i<current_neighbours.size();i++)
+                {
+                 send_rrer(current_neighbours.at(i).m_neighborAddress, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
+                }
+     }
     } 
 
 void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
 {
-//     std::cout<<"Sending RRER since link to "<<nextHop<<" broke.";
-//     std::vector<RouteEntity> route_list;
+    std::cout<<"Processing RRER since link to "<<nextHop<<" broke.";
+    //i) Find routes that use this address in any entity
+    //ii) Remove the entity from route list
+    //iii) update LoRaRoute
+    //iV) If no valid route exhists for some destination due to node unreachable then merely invalidate the route
+    //We only need to do this since it is trusted that every node will manage their respective links. Proper rediscovery only needs to be done once a node as no route 
+    //to destination
+
+    std::vector<RouteEntity> route_list;
 //     std::vector<uint8_t> precursors;
-//     std::map<uint8_t, uint32_t> unreachable;
-//    RoutingTableEntry toNextHop = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//    if (!m_routing_table.LookupRoute (nextHop, toNextHop))
-//      {
-//        return;
-//      }
-//    toNextHop.GetPrecursors (precursors);
-//    uint8_t destination_count = 1;
-//     std::vector<uint8_t> m_dest; 
-//     std::vector<uint8_t> m_dest_seq;
-//     m_dest.push_back(nextHop);
-//     m_dest_seq.push_back(toNextHop.GetSeqNo ());
-//    m_routing_table.GetListOfDestinationWithNextHop (nextHop, unreachable);
-//    for (std::map<uint8_t, uint32_t>::const_iterator i = unreachable.begin (); i
-//         != unreachable.end (); )
-//      {
-//        if (!AddUnDestination (i->first, i->second))
-//          {
-//            logInfo ("Send RERR message with max length.");
-//            //Generate an RRER packet to forward
-//             std::vector<uint8_t> output;
-//             uint8_t type = 3;
-//             //INsert the data into the packet
-//             output.push_back(type);
-//             output.push_back(0); //wills till decide RRER recipient add??
-//             output.push_back(device_ip_address);
-//             output.push_back(0); //When will I need to break
-//             output.push_back(destination_count);
-//             output.push_back(1);
-//             m_unreachableDstSeqNo.clear();
-//            //SendRerrMessage (output, precursors);
-//          }
-//        else
-//          {
-//            RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//            m_routing_table.LookupRoute (i->first, toDst);
-//            toDst.GetPrecursors (precursors);
-//             m_dest.push_back(i->first);
-//             m_dest_seq.push_back(i->second);
-//             destination_count++;
-//            ++i;
-//          }
-//      }
-//    if (m_unreachableDstSeqNo.size() != 0)
-//      {
-//             std::vector<uint8_t> output;
-//             uint8_t type = 3;
-//             //INsert the data into the packet
-//             output.push_back(type);
-//             output.push_back(0); //will till decide RRER recipient add??
-//             output.push_back(device_ip_address);
-//             output.push_back(0); //When will I need to break
-//             output.push_back(destination_count);
-//             output.push_back(1);
-//        //SendRerrMessage (output, precursors);
-//      }
-//    unreachable.insert (std::make_pair (nextHop, toNextHop.GetSeqNo ()));
-//    m_routing_table.InvalidateRoutesWithDst (unreachable);
+    std::map<uint8_t, uint32_t> unreachable;
+    std::map<uint8_t, uint32_t> destination_devices;
+     m_routing_table.GetListOfDestinationWithNextHopAOMDV(nextHop, destination_devices); //gets destination address with this hop
+    for (std::map<uint8_t, uint32_t>::const_iterator i =destination_devices.begin (); i != destination_devices.end (); ++i) //step through entries
+        {
+            RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address); //modify table entries routes
+            if (m_routing_table.LookupRoute (i->first, toDst))
+            {
+                RouteEntity remover = RouteEntity(nextHop,0,0);
+                if(toDst.removeSpecificEntity(remover))
+                {
+                    //was removed
+                    if (toDst.isRouteListEmpty())
+                    {
+                        //Nothing left so push back list of unreachable
+                        unreachable.insert (std::make_pair (i->first, i->second));
+                    }
+                }
+            }
+        }
+    RoutingTableEntry toNeigh = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address); //modify table entries routes
+    if (m_routing_table.LookupRoute (nextHop, toNeigh))  
+    {
+        unreachable.insert (std::make_pair (nextHop, toNeigh.GetSeqNo ()));
+    }      
+       for (std::map<uint8_t, uint32_t>::const_iterator i = unreachable.begin (); i
+        != unreachable.end (); )
+     {
+       AddUnDestination (i->first, i->second);
+     }
+    m_routing_table.InvalidateRoutesWithDst (unreachable);
 //    //Deleting neighbours as well
-//    myNeighbour.RemoveNeighbour(nextHop);
+    myNeighbour.RemoveNeighbour(nextHop);
     }
   
 void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precursors)
 {
-//       std::vector<RouteEntity> route_list;
-//       logInfo ("Forwarding RRER Message");
-//    if (precursors.empty ())
-//      {
-//        logInfo ("No precursors so needn't worry");
-//        return;
-//      }
-//    // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
-//    if (m_rerrCount == RERR_RATELIMIT)
-//      {
-//        // Just make sure that the RerrRateLimit timer is running and will expire
-//        // discard the packet and return
-//        logInfo("RRER rate limit has been reached");
-//        return;
-//      }
+      std::vector<RouteEntity> route_list;
+      logInfo ("Forwarding RRER Message");
+   if (precursors.empty ())
+     {
+       logInfo ("No precursors so needn't worry");
+       return;
+     }
+   // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
+   if (m_rerrCount == RERR_RATELIMIT)
+     {
+       // Just make sure that the RerrRateLimit timer is running and will expire
+       // discard the packet and return
+       logInfo("RRER rate limit has been reached");
+       return;
+     }
      
-//    // If there is only one precursor, RERR SHOULD be unicast toward that precursor
-//    if (precursors.size () == 1)
-//      {
-//        RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//        if (m_routing_table.LookupValidRoute (precursors.front (), toPrecursor))
-//          {
-//            logInfo ("one precursor => unicast RERR to: TODO morew info make clear");
-//            packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
-//            packet.at(RRER_PACKET_SENDER) = device_ip_address;
-//            m_rerrCount++;
-//            wait_on_radio();
-//            send_data(packet);
-//          }
-//        return;
-//      }
+   // If there is only one precursor, RERR SHOULD be unicast toward that precursor
+   if (precursors.size () == 1)
+     {
+       RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       if (m_routing_table.LookupValidRoute (precursors.front (), toPrecursor))
+         {
+           logInfo ("one precursor => unicast RERR to: TODO morew info make clear");
+           packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
+           packet.at(RRER_PACKET_SENDER) = device_ip_address;
+           m_rerrCount++;
+           wait_on_radio();
+           send_data(packet);
+         }
+       return;
+     }
   
-//    //  Should only transmit RERR on those interfaces which have precursor nodes for the broken route
-//    std::vector<uint8_t> addresses_send_rrer ;
-//    RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//    for (std::vector<uint8_t>::const_iterator i = precursors.begin (); i != precursors.end (); ++i)
-//      {
-//        if (m_routing_table.LookupValidRoute (*i, toPrecursor))
-//          {
-//            addresses_send_rrer.push_back (toPrecursor.GetNextHop (0)); //adds next hop to get to precursor as rrer
-//          }
-//      }
+   //  Should only transmit RERR on those interfaces which have precursor nodes for the broken route
+   std::vector<uint8_t> addresses_send_rrer ;
+   RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   for (std::vector<uint8_t>::const_iterator i = precursors.begin (); i != precursors.end (); ++i)
+     {
+       if (m_routing_table.LookupValidRoute (*i, toPrecursor))
+         {
+             std::vector<uint8_t> precursor_hop_list = toPrecursor.GetEveryHop();
+             for (int j = 0;j<precursor_hop_list.size();j++)
+             {
+                addresses_send_rrer.push_back (precursor_hop_list.at(j)); //adds next hop to get to precursor as rrer+
+             }
+         }
+     }
   
-//    for (std::vector<uint8_t>::const_iterator i = addresses_send_rrer.begin (); i != addresses_send_rrer.end (); ++i)
-//      {
-//         packet.at(RRER_PACKET_RECIPIENT) = *i;
-//         packet.at(RRER_PACKET_SENDER) = device_ip_address;
-//         m_rerrCount++;
-//         logInfo("Preparing to send RRER to: TODO add address detail");
-//         wait_on_radio();
-//         send_data(packet);
-//      } 
+   for (std::vector<uint8_t>::const_iterator i = addresses_send_rrer.begin (); i != addresses_send_rrer.end (); ++i)
+     {
+        packet.at(RRER_PACKET_RECIPIENT) = *i;
+        packet.at(RRER_PACKET_SENDER) = device_ip_address;
+        m_rerrCount++;
+        logInfo("Preparing to send RRER to: TODO add address detail");
+        wait_on_radio();
+        send_data(packet);
+     } 
     }  
     
 bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
 {
-//     logInfo("Trying to forward message through a route");
-//    m_routing_table.Purge ();
-//        //create an initial dummy
-//     std::vector<RouteEntity> route_list;
-//    RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//    if (m_routing_table.LookupRoute (dst, toDst))
-//      {
-//        if (toDst.GetFlag () == VALID)
-//          {
-//            LoRaRoute route = toDst.GetRoute ();
-//             std::cout<<"Received message ";
-//            for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
-//            {
-//                std::cout<<*i;
-//            }
-//             std::cout<<" from "<<origin<<" forwarding it to "<<route.GetNextHop ()<<" destination is "<<dst<<endl;
+    logInfo("Trying to forward message through a route");
+   m_routing_table.Purge ();
+       //create an initial dummy
+    std::vector<RouteEntity> route_list;
+   RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+   if (m_routing_table.LookupRoute (dst, toDst))
+     {
+       if (toDst.GetFlag () == VALID)
+         {
+             toDst.update_LoRa_path(); //Update so chooses best next hop
+           LoRaRoute route = toDst.GetRoute ();
+            std::cout<<"Received message ";
+           for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
+           {
+               std::cout<<*i;
+           }
+            std::cout<<" from "<<origin<<" forwarding it to "<<route.GetNextHop ()<<" destination is "<<dst<<endl;
   
-//            /*
-//             *  Each time a route is used to forward a data packet, its Active Route
-//             *  Lifetime field of the source, destination and the next hop on the
-//             *  path to the destination is updated to be no less than the current
-//             *  time plus ActiveRouteTimeout.
-//             */
-//            UpdateRouteLifeTime (origin, ACTIVE_ROUTE_TIMEOUT);
-//            UpdateRouteLifeTime (dst, ACTIVE_ROUTE_TIMEOUT);
-//            UpdateRouteLifeTime (route.GetNextHop (), ACTIVE_ROUTE_TIMEOUT);
-//            /*
-//             *  Since the route between each originator and destination pair is expected to be symmetric, the
-//             *  Active Route Lifetime for the previous hop, along the reverse path back to the IP source, is also updated
-//             *  to be no less than the current time plus ActiveRouteTimeout
-//             */
-//            RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//            m_routing_table.LookupRoute (origin, toOrigin);
-//            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
+           /*
+            *  Each time a route is used to forward a data packet, its Active Route
+            *  Lifetime field of the source, destination and the next hop on the
+            *  path to the destination is updated to be no less than the current
+            *  time plus ActiveRouteTimeout.
+            */
+           UpdateRouteLifeTime (origin, ACTIVE_ROUTE_TIMEOUT);
+           UpdateRouteLifeTime (dst, ACTIVE_ROUTE_TIMEOUT);
+           UpdateRouteLifeTime (route.GetNextHop (), ACTIVE_ROUTE_TIMEOUT);
+           /*
+            *  Since the route between each originator and destination pair is expected to be symmetric, the
+            *  Active Route Lifetime for the previous hop, along the reverse path back to the IP source, is also updated
+            *  to be no less than the current time plus ActiveRouteTimeout
+            */
+           RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+           m_routing_table.LookupRoute (origin, toOrigin);
+           
+           //NB making assumnption that sender is the Origin.nedxtHop route that needs updated
+           UpdateRouteLifeTime (p.at(MESSAGE_PACKET_SENDER), ACTIVE_ROUTE_TIMEOUT);
   
-//            myNeighbour.Update (route.GetNextHop (), ACTIVE_ROUTE_TIMEOUT);
-//            myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-//             logInfo("Sending Packet Forward TODO choosing path load etc");
-//             send_message_data(route.GetNextHop (), device_ip_address, origin, dst,0, p);
-//            return true;
-//          }
-//        else
-//          {
-//            if (toDst.GetValidSeqNo ())
-//              {
-//                SendRerrWhenNoRouteToForward (dst, toDst.GetSeqNo (), origin);
-//                logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
-//                return false;
-//              }
-//          }
-//      }
-//     logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
-//    SendRerrWhenNoRouteToForward (dst, 0, origin);
+           myNeighbour.Update (route.GetNextHop (), ACTIVE_ROUTE_TIMEOUT);
+           myNeighbour.Update (p.at(MESSAGE_PACKET_SENDER), ACTIVE_ROUTE_TIMEOUT);
+            logInfo("Sending Packet Forward TODO choosing path load etc");
+            send_message_data(route.GetNextHop (), device_ip_address, origin, dst,0, p);
+           return true;
+         }
+       else
+         {
+           if (toDst.GetValidSeqNo ())
+             {
+                //toDst is made INVALID if no alternative path is provided to dst so then tell every to not use this node anymore
+               SendRerrWhenNoRouteToForward (dst, toDst.GetSeqNo (), origin);
+               logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
+               return false;
+             }
+         }
+     }
+    logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
+   SendRerrWhenNoRouteToForward (dst, 0, origin);
    return false;
     } 
     
@@ -713,23 +713,23 @@ bool Route_Input(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
   //TODO should I check for dublicate packets
    // Broadcast local delivery/forwarding
    // Checks if this node is the destination
-//    if (dst == device_ip_address)
-//      {
-//        UpdateRouteLifeTime (origin, ACTIVE_ROUTE_TIMEOUT);
-//        RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-//        if (m_routing_table.LookupValidRoute (origin, toOrigin))
-//          {
-//            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-//            myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-//            std::cout<<"Received message ";
-//            for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
-//            {
-//                std::cout<<*i;
-//            }
-//             std::cout<<" from "<<origin<<endl;
-//          }
-//        return true;
-//      }
+   if (dst == device_ip_address)
+     {
+       UpdateRouteLifeTime (origin, ACTIVE_ROUTE_TIMEOUT);
+       RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       if (m_routing_table.LookupValidRoute (origin, toOrigin))
+         {
+           UpdateRouteLifeTime (p.at(MESSAGE_PACKET_SENDER), ACTIVE_ROUTE_TIMEOUT);
+           myNeighbour.Update (p.at(MESSAGE_PACKET_SENDER), ACTIVE_ROUTE_TIMEOUT);
+           std::cout<<"Received message ";
+           for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
+           {
+               std::cout<<*i;
+           }
+            std::cout<<" from "<<origin<<endl;
+         }
+       return true;
+     }
   
    // Forwarding
    //forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
@@ -1097,7 +1097,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
          //Destination sends reply up to k times to
        m_routing_table.LookupRoute (origin, toOrigin);
        logInfo ("Send reply since I am the destination");
-       SendReply (packet, toOrigin);
+       SendReply (packet, toOrigin, packet.at(RREP_PACKET_ORIGIN_NEIGH));
        return;
      }
    /*
@@ -1142,7 +1142,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                m_routing_table.LookupRoute (origin, toOrigin);
                //Create this function
                logInfo("Sending route by intermediate node");
-               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH),source);
                return;
              }
             
@@ -1192,7 +1192,6 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
     //Addtionally I will monitor where RREP packets came from when they go throuhg the check
     //This is to ensure no dublicates are obtained 
         //Create dummy routelist for entry initialization
-        //WHY is this not updating
     std::vector<RouteEntity> route_list;
     RoutingTableEntry checker = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
    
@@ -1234,6 +1233,7 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
             {
                 //This RREP has been received check if it is a new unique entry in neigh_holder
                 std::cout<<"RREP packet from source "<<src<<" has been received drop packet."<<endl;
+                return;
             }
             else {
                 element->second.push_back(src);//add address to the list
@@ -1422,21 +1422,89 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
    // Update information about precursors
    if (m_routing_table.LookupValidRoute (packet.at(RREP_PACKET_DESTINATION_IP), toDst))
      {
-       toDst.InsertPrecursor (toOrigin.GetNextHop (0));
+         //Adding the precursor information for the relevant entries
+        std::vector<uint8_t> hop_list_origin = toOrigin.GetNextHop(packet.at(RREP_PACKET_ORIGIN_NEIGH)); 
+        std::vector<uint8_t> hop_list_Dst = toDst.GetNextHop(src); 
+        std::vector<RouteEntity> entity_list_origin = toOrigin.get_entity_with_neigh_source(packet.at(RREP_PACKET_ORIGIN_NEIGH));
+        std::vector<RouteEntity> entity_list_dst = toDst.get_entity_with_neigh_source(src);
+        std::vector<RoutingTableEntry> toNextHopToDst_list;
+        std::vector<RoutingTableEntry> toNextHopToOrigin_list;
+
+        toDst.clear_route_list();
+        for (int i = 0;i<entity_list_dst.size();i++)
+        {
+            for(int j = 0;j<hop_list_origin.size();j++)
+            {
+                //adding precursor to every new entry from source
+                entity_list_dst.at(i).InsertPrecursor(hop_list_origin.at(j));
+                toDst.addRoutingEntity(entity_list_origin.at(i));
+            }
+        }
+        toDst.SetNextHop();
        m_routing_table.Update (toDst);
+
+        //FOr every hop to dest need to find route entry and for each of it's hops use the origin hop as the precursor
+        for(int i = 0;i<hop_list_Dst.size();i++)
+            {
+                //adding precursor to every new entry from source
+                toNextHopToDst_list.push_back(RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address));
+            for(int j = 0;j<hop_list_origin.size();j++)
+                {
+                    //adding precursor to every new entry from source
+                    m_routing_table.LookupRoute (hop_list_Dst.at(i), toNextHopToDst_list.at(i));
+                    std::vector<RouteEntity> temp = toNextHopToDst_list.at(i).get_entity_with_neigh_source(src);
+                    toNextHopToDst_list.at(i).clear_route_list();
+                    for (int l = 0;l<temp.size();l++)
+                    {
+                        for(int m = 0;m<hop_list_Dst.size();m++)
+                        {
+                            //adding precursor to every new entry from source
+                            temp.at(l).InsertPrecursor(hop_list_Dst.at(m));
+                            toNextHopToDst_list.at(i).addRoutingEntity(temp.at(l));
+                        }
+                    }  
+                    toNextHopToDst_list.at(i).SetNextHop();
+                    m_routing_table.Update (toNextHopToDst_list.at(i)) ;                
+                }
+            }
   
-       RoutingTableEntry toNextHopToDst =  RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-       m_routing_table.LookupRoute (toDst.GetNextHop (0), toNextHopToDst);
-       toNextHopToDst.InsertPrecursor (toOrigin.GetNextHop (0));
-       m_routing_table.Update (toNextHopToDst);
-  
-       toOrigin.InsertPrecursor (toDst.GetNextHop (0));
+        toOrigin.clear_route_list();
+        for (int i = 0;i<entity_list_origin.size();i++)
+        {
+            for(int j = 0;j<hop_list_Dst.size();j++)
+            {
+                //adding precursor to every new entry from source
+                entity_list_origin.at(i).InsertPrecursor(hop_list_Dst.at(j));
+                toOrigin.addRoutingEntity(entity_list_origin.at(i));
+            }
+        }
+        toOrigin.SetNextHop();
        m_routing_table.Update (toOrigin);
-  
-       RoutingTableEntry toNextHopToOrigin =  RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-       m_routing_table.LookupRoute (toOrigin.GetNextHop (0), toNextHopToOrigin);
-       toNextHopToOrigin.InsertPrecursor (toDst.GetNextHop (0));
-       m_routing_table.Update (toNextHopToOrigin);
+
+        //FOr every hop to dest need to find route entry and for each of it's hops use the origin hop as the precursor
+        for(int i = 0;i<hop_list_origin.size();i++)
+            {
+                //adding precursor to every new entry from source
+                toNextHopToOrigin_list.push_back(RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address));
+            for(int j = 0;j<hop_list_Dst.size();j++)
+                {
+                    //adding precursor to every new entry from source
+                    m_routing_table.LookupRoute (hop_list_origin.at(i), toNextHopToOrigin_list.at(i));
+                    std::vector<RouteEntity> temp = toNextHopToOrigin_list.at(i).get_entity_with_neigh_source(packet.at(RREP_PACKET_ORIGIN_NEIGH));
+                    toNextHopToOrigin_list.at(i).clear_route_list();
+                    for (int l = 0;l<temp.size();l++)
+                    {
+                        for(int m = 0;m<hop_list_origin.size();m++)
+                        {
+                            //adding precursor to every new entry from source
+                            temp.at(l).InsertPrecursor(hop_list_origin.at(m));
+                            toNextHopToOrigin_list.at(i).addRoutingEntity(temp.at(l));
+                        }
+                    }  
+                    toNextHopToOrigin_list.at(i).SetNextHop();
+                    m_routing_table.Update (toNextHopToOrigin_list.at(i)) ;                
+                }
+            }
      }
      uint8_t ttl_m = packet.at(RREP_PACKET_TTL);
    if (ttl_m < 2)
@@ -1447,9 +1515,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
 
     packet.at(RREP_PACKET_TTL) = ttl_m - 1;
     packet.at(RREP_PACKET_SENDER) = device_ip_address;
-    packet.at(RREP_PACKET_RECIPIENT) = toOrigin.GetNextHop (0);
-    send_data(packet); //Sending reply back to origin
-
+    std::vector<uint8_t> hop_list_origin = toOrigin.GetNextHop(packet.at(RREP_PACKET_ORIGIN_NEIGH));
+    for(int i = 0;i<hop_list_origin.size();i++)
+    {
+        //Send RREP to every route back to neighbour
+        packet.at(RREP_PACKET_RECIPIENT) = hop_list_origin.at(i);
+        ThisThread::sleep_for(200ms);
+        send_data(packet); //Sending reply back to origin
+    }
     }    
  
  
@@ -1475,7 +1548,7 @@ void receive_rrer(std::vector<uint8_t> p, uint8_t src)
     m_unreachableDstSeqNo.clear();
    std::map<uint8_t, uint32_t> dstWithNextHopSrc;
    std::map<uint8_t, uint32_t> unreachable;
-   m_routing_table.GetListOfDestinationWithNextHop (src, dstWithNextHopSrc);
+   m_routing_table.GetListOfDestinationWithNextHopAOMDV (src, dstWithNextHopSrc);
    std::pair<uint8_t, uint32_t> un;
    //add all unreachable destinations
    for (int i=0;i<p.at(RRER_PACKET_DESTCOUNT);i++)
@@ -1526,7 +1599,7 @@ void receive_rrer(std::vector<uint8_t> p, uint8_t src)
          {
            RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
            m_routing_table.LookupRoute (i->first, toDst);
-           toDst.GetPrecursors (precursors);
+           toDst.getPrecursorsEntry (precursors);
            ++i;
          }
      }
@@ -1840,7 +1913,7 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
     
     }
 
-int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack) {
+int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source) {
 // FORMAT OF RREP MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
 //    0                   1                   2                   3
@@ -1875,6 +1948,7 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     output.push_back(source_add);
     output.push_back(m_ttl);
     output.push_back(r_ack);
+    output.push_back(neighbour_source);
     //wait for the radio to be done
     std::cout<<"Sending "<<output.size()<<" bytes "<<endl;
     wait_on_radio();
