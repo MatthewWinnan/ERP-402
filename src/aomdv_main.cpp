@@ -11,6 +11,8 @@
 //TODO check if my neighbour table works with my hallo timer properly
 //NB Routes to Destination is marked with source from where the RREP came from
 //NB Routes to Origin is marked by Origin Neighbour tag
+//AOMDV will be modified to AOMDV-LR for local reactive and proactive link repairing.
+//Hopes is to decrease overhead of route maintenance. Link-breakages are detected by HALLO packets and failure to receive one back.
 
 #include "aomdv_main.h"
 
@@ -181,6 +183,7 @@ void start()
         main_queue.event(message_queue_handler);
     #elif ACTIVE_USER == ROUTING_NODE
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
+        rrer_rreq_t.attach(&QueueRerrRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
         routing_t.attach(&queue_request_queue_handler,1s);
         message_t.attach(&queue_message_handler,1s);
@@ -192,6 +195,7 @@ void start()
         main_queue.event(request_queue_handler);
         main_queue.event(RouteRequestTimerExpire);
         main_queue.event(message_queue_handler);
+        main_queue.event(RouteRerrRequestTimerExpire);
     #elif ACTIVE_USER == CLIENT_NODE
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
@@ -306,7 +310,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
     std::vector<uint8_t> hop_list = toOrigin.GetNextHop(packet.at(RREQ_PACKET_ORIGIN_NEIGH)); 
     for (int i = 0;i<hop_list.size();i++)
     {
-        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source); 
+        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source,0); 
         ThisThread::sleep_for(100ms); //Small gap in sending receiving
         //TODO find out if fine
         //TODO find out if precursor needed
@@ -369,7 +373,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
     for(int j = 0;j<hop_list_origin.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source);
+    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source,0);
     ThisThread::sleep_for(100ms); //Small gap in sending receiving
         }
   
@@ -388,7 +392,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
            for(int j = 0;j<hop_list_Dst.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source);
+    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source,0);
     ThisThread::sleep_for(100ms); //Small gap in sending receiving
         }
      }
@@ -442,7 +446,7 @@ void send_rreq(uint8_t dest)//Only client really calls this
      {
        sseq_known_reply = 1;
        //For AOMDV MAKE INITIAL HOP BE NET_DIAMETER
-        RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,m_sequence,NET_DIAMETER,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+        RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,0,NET_DIAMETER,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
        // Check if TtlStart == NetDiameter
        if (ttl == NET_DIAMETER)
          {
@@ -466,22 +470,107 @@ void send_rreq(uint8_t dest)//Only client really calls this
     for (int i = 0;i<current_neighbours.size();i++)
     {
         logInfo ("Sending RREQ");
-        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress);//I know first neighbours from origin so format packet according
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,0);//I know first neighbours from origin so format packet according
+        ThisThread::sleep_for(200ms);      
        }
     } 
- 
+
+void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo)
+{
+        //This is replaced by stage 2 of AOMDV-LR
+//     If intermediate node C has other sub routes
+// to destination D in its routing table, it will select the sub route
+// with the least hop count and send packet via this route.
+// But if it has no sub-route to destination D, node C does not
+// send any RERR message to the source. Instead, it attempt to
+// reach destination node D via another hop. It investigates again
+// to reach to node D by sending a RREQ message to its neighbor
+// only by incrementing sequence number of the destination by 1
+// before to prevent loop construction. And when it finds any
+// node along its new path node 5 and starts sending packets via
+// node 5 to D (1) as in figure 3
+    //create an initial dummy
+    std::vector<RouteEntity> route_list;
+    RoutingTableEntry rt = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+    uint8_t ttl = TTL_START;
+    uint8_t reply_seq_origin = 0;
+    uint8_t reply_seq_dest = 0;
+    uint8_t sseq_known_reply = 0;
+    uint8_t gratious_reply = 0;
+    //Does ring calculations
+    if (m_routing_table.LookupRoute (dst, rt))
+     {
+       if (rt.GetFlag () != IN_SEARCH)
+         {
+           ttl = std::min<uint16_t> (rt.GetHop () + TTL_INCREMENT, NET_DIAMETER);
+         }
+       else
+         {
+           ttl = rt.GetHop () + TTL_INCREMENT;
+           if (ttl > TTL_THRESHOLD)
+             {
+               ttl = NET_DIAMETER;
+             }
+         }
+       if (ttl == NET_DIAMETER)
+         {
+           rt.IncrementRreqCnt ();
+         }
+       if (rt.GetValidSeqNo ())
+         {
+           reply_seq_dest = rt.GetSeqNo ();
+         }
+       else
+         {
+           sseq_known_reply = 1;
+         }
+       rt.SetHop (ttl);
+       rt.SetFlag (IN_SEARCH);
+       rt.SetLifeTime (NET_TRAVERSAL_TIME);
+       rt.SetSeqNo(dstSeqNo); //set's new sequence number to updated version
+       m_routing_table.Update (rt);
+        //Whenever node i sends request update advertised hop to d
+        rt.update_advertise_hop();
+     }
+   else
+     {
+       sseq_known_reply = 1;
+       //For AOMDV MAKE INITIAL HOP BE NET_DIAMETER
+        RoutingTableEntry newEntry = RoutingTableEntry(destination_ip_address,0,NET_DIAMETER,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+       // Check if TtlStart == NetDiameter
+       if (ttl == NET_DIAMETER)
+         {
+           newEntry.IncrementRreqCnt ();
+         }
+       newEntry.SetFlag (IN_SEARCH);
+       m_routing_table.AddRoute (newEntry,0);
+        //Whenever node i sends request update advertised hop to d
+        newEntry.update_advertise_hop();
+     }
+     
+   update_node_seq(1,1);
+   reply_seq_origin = m_sequence;
+   m_requestId++;
+   //Schedule a wait thing to wait to RREQ again depedning on repeats.
+   ScheduleRreqRetry (dst);
+   //Sending the RREQ now then
+   //I do want to send a Gratuitous RREP
+   //Sending RREQ to every known neighbour
+    std::vector<Neighbors::Neighbor> current_neighbours = myNeighbour.getListNeighbours();
+    for (int i = 0;i<current_neighbours.size();i++)
+    {
+        logInfo ("Sending RREQ");
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, dstSeqNo, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,0);//I know first neighbours from origin so format packet according
+        ThisThread::sleep_for(200ms);
+       }
+
+} 
 void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
 {
-       logInfo ("Sending RerrWhenNoRouteToForward");
+
+
+       std::cout<<"Time "<<clock()<<"(cycles): RREQ sent for "<<dst<<" since no route forward detected."<<endl;
        std::vector<RouteEntity> route_list;
-   // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
-   if (m_rerrCount == RERR_RATELIMIT)
-     {
-       // Just make sure that the RerrRateLimit timer is running and will expire
-       // discard the packet and return
-       logInfo("RRER rate limit has been reached");
-       return;
-     }
     std::vector<uint8_t> m_dest; 
     std::vector<uint8_t> m_dest_seq;
     m_dest.push_back(dst);
@@ -1864,7 +1953,7 @@ void message_queue_handler(void)
 //      Route-Reply Ack (RREP-ACK)      4
       
 
-int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source) {
+int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer) {
 // FORMAT OF RREQ MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
 //    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -1889,6 +1978,7 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                    acknowledge the reply                      |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+//Modification for AOMDV-LR added rrer_rreq to indentify premptive route recovery RREQ packets from normal RREQ packets 
     std::vector<uint8_t> output;
     uint8_t type = 1;
     //INsert the data into the packet
@@ -1906,6 +1996,7 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
     output.push_back(m_ttl);
     output.push_back(r_ack);
     output.push_back(neighbour_source);
+    output.push_back(rreq_rrer);
     //wait for the radio to be done
     wait_on_radio();
     return send_data(output);
@@ -1913,7 +2004,7 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
     
     }
 
-int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source) {
+int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer) {
 // FORMAT OF RREP MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
 //    0                   1                   2                   3
@@ -1931,7 +2022,7 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                    TTL                      |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
+//Modification for AOMDV-LR added rrer_rreq to indentify premptive route recovery RREP packets from normal RREP packets
 
     std::vector<uint8_t> output;
     uint8_t type = 2;
@@ -1949,6 +2040,7 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     output.push_back(m_ttl);
     output.push_back(r_ack);
     output.push_back(neighbour_source);
+    output.push_back(rreq_rrer);
     //wait for the radio to be done
     std::cout<<"Sending "<<output.size()<<" bytes "<<endl;
     wait_on_radio();
@@ -2291,6 +2383,15 @@ void Hallo_Timer_Expire()
         }
     }
 
+    void QueueRerrRouteRequestTimerExpire()
+    {
+        main_queue.call(RouteRequestTimerExpire);
+    }
+
+    void RouteRerrRequestTimerExpire ()
+    {
+        
+    }
 
     void ScheduleRreqRetry(uint8_t dst)
     {

@@ -116,6 +116,20 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
 //neighbor    neighbor address
 void send_reply_ack(uint8_t neighbor_add);
 
+    //This is replaced by stage 2 of AOMDV-LR
+//     If intermediate node C has other sub routes
+// to destination D in its routing table, it will select the sub route
+// with the least hop count and send packet via this route.
+// But if it has no sub-route to destination D, node C does not
+// send any RERR message to the source. Instead, it attempt to
+// reach destination node D via another hop. It investigates again
+// to reach to node D by sending a RREQ message to its neighbor
+// only by incrementing sequence number of the destination by 1
+// before to prevent loop construction. And when it finds any
+// node along its new path node 5 and starts sending packets via
+// node 5 to D (1) as in figure 3
+void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo);
+
 //Send RERR message when no route to forward input packet.
 //
 //Unicast if there is reverse route to originating node, broadcast otherwise.
@@ -228,11 +242,18 @@ void ProcessHello(std::vector<uint8_t> packet);
 // dst	the destination IP address
 void ScheduleRreqRetry(uint8_t dst);
 
+//Repeated attempts by a node to restablish connection to destination via new RREQ
+
+//Parameters
+//dst the destination IP address
+//dstSeqNo the new SeqNo of the destination
+void ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo);
+
 ///////////////////////////////////////////////////////////////////////////////
 /////////////PACKET SENDING FUNCTIONS/////////////////////////////////////////
-int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source);
+int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer);
 
-int send_rrep(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source);
+int send_rrep(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer);
 
 int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount, uint8_t ttl, std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq);
 
@@ -275,6 +296,8 @@ Ticker routing_t;
 Ticker message_t;
 //Main Error Thread
 Ticker rreq_t;
+//Main RRER RREQ Thread
+Ticker rrer_rreq_t;
 
 ///Flags to keep track of errors
 bool hallo_flag;
@@ -309,10 +332,25 @@ std::map<uint8_t, uint8_t> m_rreq_retry;
 //dst   packet
 std::map<uint8_t, std::vector<uint8_t>> m_rreq_buffer;
 
+//Helps manage the RRER RREQ of different addresses
+std::map<uint8_t, clock_t> m_addressRerrReqTimer;
+//Tracks the amount of retries for the RREQ
+//KEY   VALUE
+//dst   retries
+std::map<uint8_t, uint8_t> m_rerr_rreq_retry;
+//Tracks the packets to be sent over for retrying
+//KEY   VALUE
+//dst   packet
+std::map<uint8_t, std::vector<uint8_t>> m_rerr_rreq_buffer;
+
 //Repeatedly call this to check the rate of RREQ and to reschedule RREQ
 void RouteRequestTimerExpire ();
 //Queues the function into event so it exists the IRQ
 void QueueRouteRequestTimerExpire();
+//Repeatedly call this to check the rate of RRER RREQ and to reschedule RRER RREQ
+void RouteRerrRequestTimerExpire ();
+//Queues the function into event so it exists the IRQ
+void QueueRerrRouteRequestTimerExpire();
 
 void AckTimerExpire (uint8_t neighbor, clock_t blacklistTimeout);
 

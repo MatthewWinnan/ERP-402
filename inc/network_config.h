@@ -184,7 +184,9 @@ typedef enum {
 ////////////////////////////////////////////////
 #if ACTIVE_VERSION==AOMDV
 #define RREQ_PACKET_ORIGIN_NEIGH 13
+#define RREQ_PACKET_RRER_RREQ 14
 #define RREP_PACKET_ORIGIN_NEIGH 11
+#define RREP_PACKET_RRER_RREQ 12
 #define K_REPEATS 3
 #endif
 
