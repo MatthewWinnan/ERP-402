@@ -15,6 +15,7 @@
 //Hopes is to decrease overhead of route maintenance. Link-breakages are detected by HALLO packets and failure to receive one back.
 
 #include "aomdv_main.h"
+#include <utility>
 
 #if ACTIVE_VERSION == AOMDV
 
@@ -286,7 +287,7 @@ void send_reply_ack(uint8_t neighbor_add)
    send_ack(neighbor_add, device_ip_address, 1);
     }
     
-void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source)
+void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source, uint8_t RRER_RREQ)
 {
     //This stays the same for AOMDV
        logInfo ("Sending a reply back from destination");
@@ -310,7 +311,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
     std::vector<uint8_t> hop_list = toOrigin.GetNextHop(packet.at(RREQ_PACKET_ORIGIN_NEIGH)); 
     for (int i = 0;i<hop_list.size();i++)
     {
-        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source,0); 
+        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source,RRER_RREQ); 
         ThisThread::sleep_for(100ms); //Small gap in sending receiving
         //TODO find out if fine
         //TODO find out if precursor needed
@@ -318,7 +319,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
      }
     
 //FOr AOMDV I need to know neighbour of RREQ when sending intermediate reply
-void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src)
+void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ)
 {
        logInfo ("Sending Reply By Intermediate Node");
        //Generate the RREP message parameters
@@ -392,7 +393,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
            for(int j = 0;j<hop_list_Dst.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source,0);
+    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source,RRER_RREQ);
     ThisThread::sleep_for(100ms); //Small gap in sending receiving
         }
      }
@@ -475,7 +476,7 @@ void send_rreq(uint8_t dest)//Only client really calls this
        }
     } 
 
-void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo)
+void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
 {
         //This is replaced by stage 2 of AOMDV-LR
 //     If intermediate node C has other sub routes
@@ -551,8 +552,6 @@ void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo)
    update_node_seq(1,1);
    reply_seq_origin = m_sequence;
    m_requestId++;
-   //Schedule a wait thing to wait to RREQ again depedning on repeats.
-   ScheduleRreqRetry (dst);
    //Sending the RREQ now then
    //I do want to send a Gratuitous RREP
    //Sending RREQ to every known neighbour
@@ -560,16 +559,17 @@ void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo)
     for (int i = 0;i<current_neighbours.size();i++)
     {
         logInfo ("Sending RREQ");
-        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, dstSeqNo, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,0);//I know first neighbours from origin so format packet according
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, dstSeqNo, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,1);//I know first neighbours from origin so format packet according
         ThisThread::sleep_for(200ms);
        }
-
+    //Schedule a wait thing to wait to RREQ again depedning on repeats.
+    ScheduleRrerRreqRetry (dst,dstSeqNo,origin);
 } 
 void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
 {
 
 
-       std::cout<<"Time "<<clock()<<"(cycles): RREQ sent for "<<dst<<" since no route forward detected."<<endl;
+       std::cout<<"Time "<<clock()<<"(cycles): SendRerrWhenNoRouteToForward sent for "<<dst<<" since no route forward detected."<<endl;
        std::vector<RouteEntity> route_list;
     std::vector<uint8_t> m_dest; 
     std::vector<uint8_t> m_dest_seq;
@@ -629,7 +629,21 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
                     if (toDst.isRouteListEmpty())
                     {
                         //Nothing left so push back list of unreachable
+                        if (toDst.GetValidSeqNo())
+                        {
+                            LoRaRoute route_holder = toDst.GetRoute();
+                            SendRreqWhenNoRouteForward(i->first,toDst.GetSeqNo()+1,route_holder.GetSource());
+                        }
+                        else 
+                        {
+                            LoRaRoute route_holder = toDst.GetRoute();
+                            SendRreqWhenNoRouteForward(i->first,1,route_holder.GetSource());
+                        }
                         unreachable.insert (std::make_pair (i->first, i->second));
+                    }
+                    else {
+                    toDst.update_advertise_hop(); //updating advertised hop
+                    toDst.update_LoRa_path();
                     }
                 }
             }
@@ -649,65 +663,65 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
     myNeighbour.RemoveNeighbour(nextHop);
     }
   
-void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precursors)
-{
-      std::vector<RouteEntity> route_list;
-      logInfo ("Forwarding RRER Message");
-   if (precursors.empty ())
-     {
-       logInfo ("No precursors so needn't worry");
-       return;
-     }
-   // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
-   if (m_rerrCount == RERR_RATELIMIT)
-     {
-       // Just make sure that the RerrRateLimit timer is running and will expire
-       // discard the packet and return
-       logInfo("RRER rate limit has been reached");
-       return;
-     }
+// void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precursors)
+// {
+//       std::vector<RouteEntity> route_list;
+//       logInfo ("Forwarding RRER Message");
+//    if (precursors.empty ())
+//      {
+//        logInfo ("No precursors so needn't worry");
+//        return;
+//      }
+//    // A node SHOULD NOT originate more than RERR_RATELIMIT RERR messages per second.
+//    if (m_rerrCount == RERR_RATELIMIT)
+//      {
+//        // Just make sure that the RerrRateLimit timer is running and will expire
+//        // discard the packet and return
+//        logInfo("RRER rate limit has been reached");
+//        return;
+//      }
      
-   // If there is only one precursor, RERR SHOULD be unicast toward that precursor
-   if (precursors.size () == 1)
-     {
-       RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-       if (m_routing_table.LookupValidRoute (precursors.front (), toPrecursor))
-         {
-           logInfo ("one precursor => unicast RERR to: TODO morew info make clear");
-           packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
-           packet.at(RRER_PACKET_SENDER) = device_ip_address;
-           m_rerrCount++;
-           wait_on_radio();
-           send_data(packet);
-         }
-       return;
-     }
+//    // If there is only one precursor, RERR SHOULD be unicast toward that precursor
+//    if (precursors.size () == 1)
+//      {
+//        RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+//        if (m_routing_table.LookupValidRoute (precursors.front (), toPrecursor))
+//          {
+//            logInfo ("one precursor => unicast RERR to: TODO morew info make clear");
+//            packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
+//            packet.at(RRER_PACKET_SENDER) = device_ip_address;
+//            m_rerrCount++;
+//            wait_on_radio();
+//            send_data(packet);
+//          }
+//        return;
+//      }
   
-   //  Should only transmit RERR on those interfaces which have precursor nodes for the broken route
-   std::vector<uint8_t> addresses_send_rrer ;
-   RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-   for (std::vector<uint8_t>::const_iterator i = precursors.begin (); i != precursors.end (); ++i)
-     {
-       if (m_routing_table.LookupValidRoute (*i, toPrecursor))
-         {
-             std::vector<uint8_t> precursor_hop_list = toPrecursor.GetEveryHop();
-             for (int j = 0;j<precursor_hop_list.size();j++)
-             {
-                addresses_send_rrer.push_back (precursor_hop_list.at(j)); //adds next hop to get to precursor as rrer+
-             }
-         }
-     }
+//    //  Should only transmit RERR on those interfaces which have precursor nodes for the broken route
+//    std::vector<uint8_t> addresses_send_rrer ;
+//    RoutingTableEntry toPrecursor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+//    for (std::vector<uint8_t>::const_iterator i = precursors.begin (); i != precursors.end (); ++i)
+//      {
+//        if (m_routing_table.LookupValidRoute (*i, toPrecursor))
+//          {
+//              std::vector<uint8_t> precursor_hop_list = toPrecursor.GetEveryHop();
+//              for (int j = 0;j<precursor_hop_list.size();j++)
+//              {
+//                 addresses_send_rrer.push_back (precursor_hop_list.at(j)); //adds next hop to get to precursor as rrer+
+//              }
+//          }
+//      }
   
-   for (std::vector<uint8_t>::const_iterator i = addresses_send_rrer.begin (); i != addresses_send_rrer.end (); ++i)
-     {
-        packet.at(RRER_PACKET_RECIPIENT) = *i;
-        packet.at(RRER_PACKET_SENDER) = device_ip_address;
-        m_rerrCount++;
-        logInfo("Preparing to send RRER to: TODO add address detail");
-        wait_on_radio();
-        send_data(packet);
-     } 
-    }  
+//    for (std::vector<uint8_t>::const_iterator i = addresses_send_rrer.begin (); i != addresses_send_rrer.end (); ++i)
+//      {
+//         packet.at(RRER_PACKET_RECIPIENT) = *i;
+//         packet.at(RRER_PACKET_SENDER) = device_ip_address;
+//         m_rerrCount++;
+//         logInfo("Preparing to send RRER to: TODO add address detail");
+//         wait_on_radio();
+//         send_data(packet);
+//      } 
+//     }  
     
 bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
 {
@@ -760,14 +774,16 @@ bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
            if (toDst.GetValidSeqNo ())
              {
                 //toDst is made INVALID if no alternative path is provided to dst so then tell every to not use this node anymore
-               SendRerrWhenNoRouteToForward (dst, toDst.GetSeqNo (), origin);
+                LoRaRoute route_holder = toDst.GetRoute();
+               SendRreqWhenNoRouteForward (dst, toDst.GetSeqNo (),route_holder.GetSource());
                logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
                return false;
              }
          }
      }
     logInfo ("Drop packet because no route to forward it sending SendRerrWhenNoRouteToForward line 621.");
-   SendRerrWhenNoRouteToForward (dst, 0, origin);
+    LoRaRoute route_holder = toDst.GetRoute();
+   SendRreqWhenNoRouteForward (dst, 0, route_holder.GetSource());
    return false;
     } 
     
@@ -928,17 +944,17 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
            if (int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (checker.GetSeqNo ()) > 0)
            {
                 //Fresher RREQ so clear the trackers.
-                   neighbour_source_list.clear();
-                   firsthop_counter.clear();
-                   firsthop_list.clear();
+                   neighbour_source_list.erase(origin);
+                   firsthop_counter.erase(origin);
+                   firsthop_list.erase(origin);
            }
        }
        else 
        {
                  //Treat this as fresher RREQ so clear the trackers.
-                   neighbour_source_list.clear();
-                   firsthop_counter.clear();
-                   firsthop_list.clear();          
+                   neighbour_source_list.erase(origin);
+                   firsthop_counter.erase(origin);
+                   firsthop_list.erase(origin);         
        }
      }
 
@@ -1023,7 +1039,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
         holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
         firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
         //Keep track of amount of RREQ received if below K
-        firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+        //Make initial dummy neighbour map
+        std::map<uint8_t, uint8_t> counter_holder;
+        counter_holder.insert(std::make_pair(packet.at(RREQ_PACKET_ORIGIN_NEIGH),1));
+        firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), counter_holder));
     }
     else 
     {
@@ -1037,11 +1056,12 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             {
                 //check if the amount received from this neighbour is smaller
                 //First find the entry in the counter list
-                auto element_counter=firsthop_counter.find(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+                auto element_entry=firsthop_counter.find(packet.at(RREQ_PACKET_ORIGIN_IP));
+                auto element_counter = element_entry->second.find(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
                 if (element_counter->first == packet.at(RREQ_PACKET_ORIGIN_NEIGH))
                 {
                     //found it
-                    if (element_counter->second>K_REPEATS)
+                    if (element_counter->second > K_REPEATS)
                     {
                         return;//count too high drop
                     }
@@ -1059,7 +1079,8 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                 element->second.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));//add address to the list
                 //This is a new neighbour so add new entry to the source tracking list
                 //Keep track of amount of RREQ received if below K
-                firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+                auto element_entry=firsthop_counter.find(packet.at(RREQ_PACKET_ORIGIN_IP));
+                element_entry->second.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
             }
         }
         else {
@@ -1067,8 +1088,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             std::vector<uint8_t> holder;
             holder.push_back(packet.at(RREQ_PACKET_ORIGIN_NEIGH));
             firsthop_list.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), holder));
-            //Keep track of amount of RREQ received if below K
-            firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_NEIGH), 1));
+            //Make initial dummy neighbour map
+            std::map<uint8_t, uint8_t> counter_holder;
+            counter_holder.insert(std::make_pair(packet.at(RREQ_PACKET_ORIGIN_NEIGH),1));
+            firsthop_counter.insert(std::make_pair (packet.at(RREQ_PACKET_ORIGIN_IP), counter_holder));
         }
     }
    #endif
@@ -1186,7 +1209,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
          //Destination sends reply up to k times to
        m_routing_table.LookupRoute (origin, toOrigin);
        logInfo ("Send reply since I am the destination");
-       SendReply (packet, toOrigin, packet.at(RREP_PACKET_ORIGIN_NEIGH));
+       SendReply (packet, toOrigin, packet.at(RREP_PACKET_ORIGIN_NEIGH), packet.at(RREQ_PACKET_RRER_RREQ));
        return;
      }
    /*
@@ -1231,7 +1254,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                m_routing_table.LookupRoute (origin, toOrigin);
                //Create this function
                logInfo("Sending route by intermediate node");
-               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH),source);
+               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH),source,packet.at(RREQ_PACKET_RRER_RREQ));
                return;
              }
             
@@ -1290,16 +1313,16 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
        if (checker.GetValidSeqNo ())
        {
            //Valid to check if neweer packet
-           if (int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (checker.GetSeqNo ()) > 0)
+           if (int8_t (packet.at(RREP_PACKET_DESTINATION_SEQ)) - int8_t (checker.GetSeqNo ()) > 0)
            {
                 //Fresher RREQ so clear the trackers.
-                rrep_firsthop_list.clear();
+                rrep_firsthop_list.erase(packet.at(RREP_PACKET_DESTINATION_IP));
            }
        }
        else 
        {
             //Treat this as fresher RREQ so clear the trackers.
-            rrep_firsthop_list.clear();       
+            rrep_firsthop_list.erase(packet.at(RREP_PACKET_DESTINATION_IP));       
        }
      }
 
@@ -1471,24 +1494,49 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
      }
    if (packet.at(RREP_PACKET_ORIGIN_IP)==device_ip_address)
      {
-       if (toDst.GetFlag () == IN_SEARCH)
-         {
-        RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),device_ip_address);
-        newEntry.SetNextHop();
-        newEntry.SetValidSeqNo(true);
-        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src);
-        newEntry.addRoutingEntity(newEntity);
-           m_routing_table.Update (newEntry);
-           logInfo("Stopping RREQ timer TODO");
-            m_addressReqTimer.erase(dst);//Deleting all entries after visited
-            m_rreq_retry.erase(dst);
+        if (packet.at(RREP_PACKET_RRER_RREQ)==0)
+        {
+            if (toDst.GetFlag () == IN_SEARCH)
+            {
+            RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),device_ip_address);
+            newEntry.SetNextHop();
+            newEntry.SetValidSeqNo(true);
+            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src);
+            newEntry.addRoutingEntity(newEntity);
+            m_routing_table.Update (newEntry);
+            logInfo("Stopping RREQ timer TODO");
 //           m_addressReqTimer[dst].Cancel ();
 //           m_addressReqTimer.erase (dst);
          }
-       m_routing_table.LookupRoute (dst, toDst);
-       logInfo("Will be sending Packet From Message Queue I found the route");
-       //SendPacketFromQueue (dst, toDst.GetRoute ());
-       return;
+        m_addressReqTimer.erase(dst);//Deleting all entries after visited
+        m_rreq_retry.erase(dst);
+        m_routing_table.LookupRoute (dst, toDst);
+        logInfo("Will be sending Packet From Message Queue I found the route");
+        //SendPacketFromQueue (dst, toDst.GetRoute ());
+        return;
+        }
+        else 
+        {
+            if (toDst.GetFlag () == IN_SEARCH)
+            {
+            RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),device_ip_address);
+            newEntry.SetNextHop();
+            newEntry.SetValidSeqNo(true);
+            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src);
+            newEntry.addRoutingEntity(newEntity);
+            m_routing_table.Update (newEntry);
+            logInfo("Stopping RREQ timer TODO");
+//           m_addressReqTimer[dst].Cancel ();
+//           m_addressReqTimer.erase (dst);
+         }
+        m_addressRerrReqTimer.erase(dst);//Deleting all entries after visited
+        m_rerr_rreq_retry.erase(dst);
+        m_rerr_rreq_seq.erase(dst);
+        m_routing_table.LookupRoute (dst, toDst);
+        logInfo("Will be sending Packet From Message Queue I found the route");
+        //SendPacketFromQueue (dst, toDst.GetRoute ());
+        return;        
+        }
      }
   
   //Just update toOrigin timers as this will be used
@@ -1632,8 +1680,20 @@ void receive_ack (uint8_t neigh_add)
 
 void receive_rrer(std::vector<uint8_t> p, uint8_t src)
 {
+//     If the node C could not investigate a new path to
+// destination D, it will send out a RERR packet to the source
+// node S via its precursor node B. If the routing table of node B
+// has another sub-route to destination D, B will select a new subroute
+// to D according to step-2. If B does not found any sub
+// route to D it again send RERR to its precursor node and this
+// process is repeated till source S if no alternate path is found in
+// the precursors node. Intermediate node will send further
+// packets via these new / old sub-route if found. If source S had
+// only one route to destination D, it will restart route discovery
+// for this destination
+    std::cout<<"Time "<<clock()<<"(cycles): Processing RRER "<<endl;
+
     std::vector<RouteEntity> route_list;
-    logInfo ("Received an RRER now handling it");
     m_unreachableDstSeqNo.clear();
    std::map<uint8_t, uint32_t> dstWithNextHopSrc;
    std::map<uint8_t, uint32_t> unreachable;
@@ -1643,81 +1703,41 @@ void receive_rrer(std::vector<uint8_t> p, uint8_t src)
    for (int i=0;i<p.at(RRER_PACKET_DESTCOUNT);i++)
    {
        m_unreachableDstSeqNo.insert(std::make_pair (p.at(RRER_PACKET_DEST_DELETE+2*i), p.at(RRER_PACKET_DEST_SSEQ+2*i)));
-       }
+    }
    //determine the unreachable destinations    
    while (RemoveUnDestination (un))
      {
-       for (std::map<uint8_t, uint32_t>::const_iterator i =
-              dstWithNextHopSrc.begin (); i != dstWithNextHopSrc.end (); ++i)
-         {
-           if (i->first == un.first)
-             {
-               unreachable.insert (un);
-             }
-         }
-     }
-  
-   std::vector<uint8_t> precursors;
-   for (std::map<uint8_t, uint32_t>::const_iterator i = unreachable.begin ();
-        i != unreachable.end (); )
-     {
-       if (!AddUnDestination (i->first, i->second))
-         {
-                 std::vector<uint8_t> output;
-            uint8_t type = 3;
-            //INsert the data into the packet
-            output.push_back(type);
-            output.push_back(0);
-            output.push_back(device_ip_address);
-            output.push_back(0);
-            output.push_back(m_unreachableDstSeqNo.size());
-            output.push_back(1);
-            for (std::map<uint8_t, uint32_t>::const_iterator i = m_unreachableDstSeqNo.begin ();
-        i != m_unreachableDstSeqNo.end ();i++)
+            RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
+            if (m_routing_table.LookupRoute (un.first, toDst))
+            {
+                RouteEntity remover = RouteEntity(src,0,0);
+                if(toDst.removeSpecificEntity(remover))
                 {
-            //PUshing in all the destinations
-            output.push_back(i->first);
-            output.push_back((uint8_t)i->second);   
+                    //was removed
+                    if (toDst.isRouteListEmpty())
+                    {
+                        //Nothing left so push back list of unreachable
+                        if (toDst.GetValidSeqNo())
+                        {
+                            LoRaRoute route_holder = toDst.GetRoute();
+                            SendRreqWhenNoRouteForward(un.first,toDst.GetSeqNo()+1,route_holder.GetSource());
+                        }
+                        else 
+                        {
+                            LoRaRoute route_holder = toDst.GetRoute();
+                            SendRreqWhenNoRouteForward(un.first,1,route_holder.GetSource());
+                        }
+                        unreachable.insert (std::make_pair (un.first, un.second));
+                    }
+                    else 
+                    {
+                        toDst.update_advertise_hop();
+                        toDst.update_LoRa_path();
+                    }
                 }
-             //Generating an RRER packet
-             m_unreachableDstSeqNo.clear ();
-             SendRerrMessage (output, precursors);
-             
-         }
-       else
-         {
-           RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
-           m_routing_table.LookupRoute (i->first, toDst);
-           toDst.getPrecursorsEntry (precursors);
-           ++i;
-         }
-     }
-   if (m_unreachableDstSeqNo.size() != 0)
-     {
-                 std::vector<uint8_t> output;
-            uint8_t type = 3;
-            //INsert the data into the packet
-            output.push_back(type);
-            output.push_back(0);
-            output.push_back(device_ip_address);
-            output.push_back(0);
-            output.push_back(m_unreachableDstSeqNo.size());
-            output.push_back(1);
-            for (std::map<uint8_t, uint32_t>::const_iterator i = m_unreachableDstSeqNo.begin ();
-        i != m_unreachableDstSeqNo.end (); i++)
-                {
-            //PUshing in all the destinations
-            output.push_back(i->first);
-            output.push_back((uint8_t)i->second);   
-                }
-             //Generating an RRER packet
-             m_unreachableDstSeqNo.clear ();
-             SendRerrMessage (output, precursors);
-     }
-   m_routing_table.InvalidateRoutesWithDst (unreachable);
-   //Deleting neighbour as well
-   myNeighbour.RemoveNeighbour(src);
+            }
     }
+ }
            
 void update_node_seq(uint8_t type ,uint8_t seq)
 {
@@ -2390,7 +2410,158 @@ void Hallo_Timer_Expire()
 
     void RouteRerrRequestTimerExpire ()
     {
-        
+        //REMEMBER RESENDRREQ IS TRIGGERED IN SEND_RREQ SO NO NEED TO DOUBLE CALL IT
+        std::cout<<"Time "<<clock()<<" (cycles): In RouteRerrRequestTimerExpire"<<endl;
+        std::vector<uint8_t> delete_list; //stores dst to be removed
+        clock_t offset = clock();
+        for (std::map<uint8_t, clock_t>::const_iterator i = m_addressRerrReqTimer.begin (); i!= m_addressRerrReqTimer.end ();i++ )
+        {
+            //Goes through every destination that the RREQ has been schedule for
+            if (i->second <offset) {
+            //Here it checks if the time when the RREQ should go off has been met
+            if (m_rerr_rreq_retry.empty())
+            {
+                //This means it will be the first retry
+                m_rerr_rreq_retry.insert(std::make_pair (i->first, 1));
+                //Find the sequence number 
+                auto sequence_number=m_rerr_rreq_seq.find(i->first);
+                auto origin_number = m_rerr_rreq_origin.find(i->first);
+                if (sequence_number!=m_rerr_rreq_seq.end())
+                {
+                        //Found
+                        if (origin_number!=m_rerr_rreq_origin.end())
+                        {
+                            SendRreqWhenNoRouteForward(i->first, sequence_number->second,origin_number->second);
+                        }
+                        else 
+                        {
+                            //error
+                             std::cout<<"Time "<<clock()<<" (cycles): Error in origin_number!=m_rerr_rreq_origin.end()"<<endl;
+                        }
+                }
+                else 
+                {
+                    //Error
+                    std::cout<<"Time "<<clock()<<" (cycles): Error in sequence_number!=m_rerr_rreq_seq.end()"<<endl;
+                }
+            }//if
+            else
+            {
+                //it is not empty so we need to find if it is in 
+                auto element=m_rerr_rreq_retry.find(i->first);
+                if (element->first==i->first)
+                {
+                    //find returns end() if not found. So then element differs
+                    //check if what was found is the same then update else add to map
+                    if(element->second>RREQ_RETRIES)
+                    {
+                        //drops exceed the limit thus link error
+                        //Also remove it from both lists
+                        std::cout<<"Time "<<clock()<<"(cycles): The route to destination "<<element->first<<" could not be found "<<endl;
+                        //Find the sequence number 
+                        auto sequence_number=m_rerr_rreq_seq.find(i->first);
+                        auto origin_number = m_rerr_rreq_origin.find(i->first);
+                        if (sequence_number!=m_rerr_rreq_seq.end())
+                        {
+                            //Found
+                            if (origin_number!=m_rerr_rreq_origin.end())
+                            {
+                                ScheduleRrerRreqRetry(i->first, sequence_number->second,origin_number->second);
+                            }
+                            else 
+                            {
+                                //error
+                                std::cout<<"Time "<<clock()<<" (cycles): Error in origin_number!=m_rerr_rreq_origin.end()"<<endl;
+                            }
+                            
+                        }
+                        else 
+                        {
+                            //Error
+                            std::cout<<"Time "<<clock()<<" (cycles): Error in sequence_number!=m_rerr_rreq_seq.end()"<<endl;
+                        }
+                        delete_list.push_back(element->first);
+                        }
+                    else
+                    {
+                        //update element
+                        element->second+=1;
+                        // Set new time based on exponential is done in void ScheduleRreqRetry(uint8_t dst)
+                        auto sequence_number=m_rerr_rreq_seq.find(i->first);
+                        auto origin_number = m_rerr_rreq_origin.find(i->first);
+                        if (sequence_number!=m_rerr_rreq_seq.end())
+                        {
+                            //Found
+                            if (origin_number!=m_rerr_rreq_origin.end())
+                            {
+                                SendRreqWhenNoRouteForward(i->first, sequence_number->second,origin_number->second);
+                            }
+                            else 
+                            {
+                                //error
+                                std::cout<<"Time "<<clock()<<" (cycles): Error in origin_number!=m_rerr_rreq_origin.end()"<<endl;
+                            }
+                        }
+                        else 
+                        {
+                            //Error
+                            std::cout<<"Time "<<clock()<<" (cycles): Error in sequence_number!=m_rerr_rreq_seq.end()"<<endl;
+                            }
+                        }
+                }
+                else
+                {
+                    //it is not actually in yet so insert it
+                    m_rerr_rreq_retry.insert(std::make_pair (i->first, 1));
+                    //Update new time is done in void ScheduleRreqRetry(uint8_t dst)
+                    //Find the sequence number 
+                    auto sequence_number=m_rerr_rreq_seq.find(i->first);
+                    auto origin_number = m_rerr_rreq_origin.find(i->first);
+                    if (sequence_number!=m_rerr_rreq_seq.end())
+                    {
+                        //Found
+                        if (origin_number!=m_rerr_rreq_origin.end())
+                        {
+                            SendRreqWhenNoRouteForward(i->first, sequence_number->second,origin_number->second);
+                        }
+                        else 
+                        {
+                            //error
+                             std::cout<<"Time "<<clock()<<" (cycles): Error in origin_number!=m_rerr_rreq_origin.end()"<<endl;
+                        }
+                    }
+
+                    else 
+                    {
+                        //Error
+                        std::cout<<"Time "<<clock()<<" (cycles): Error in sequence_number!=m_rerr_rreq_seq.end()"<<endl;
+                        }
+
+                    }
+                
+                }//else
+            
+            }//if
+            else
+            {
+             //If route is found I will remove it from list??   
+                }
+        }
+                for (std::vector<uint8_t>::const_iterator i = delete_list.begin (); i != delete_list.end (); ++i)
+        {
+                std::cout<<"Time "<<clock()<<"(cycles): RREQ for destination "<<*i<<" being dropped line 1782"<<endl;
+                auto sequence_number=m_rerr_rreq_seq.find(*i);
+                auto origin_number = m_rerr_rreq_origin.find(*i);
+                SendRerrWhenNoRouteToForward(*i,sequence_number->second,origin_number->second); //send this when no route forward could have been found
+                m_addressRerrReqTimer.erase(*i);//Deleting all entries after visited
+                m_rerr_rreq_retry.erase(*i);//Deleting all failed retry entries
+                m_rerr_rreq_seq.erase(*i);//Deleting all failed sequence numbers
+                m_rerr_rreq_origin.erase(*i);
+                //All packets from message queue should be removed
+                message_request_queue.DropPacketWithDst(*i);
+                std::cout<<"Time "<<clock()<<"(cycles): Deleting route entry for "<<*i<<" being dropped line 1869"<<endl;
+                m_routing_table.DeleteRoute(*i);
+        }        
     }
 
     void ScheduleRreqRetry(uint8_t dst)
@@ -2438,5 +2609,56 @@ void Hallo_Timer_Expire()
         }
         }
 
+    }
+
+    void ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
+    {
+        std::vector<RouteEntity> route_list;
+        RoutingTableEntry rt = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+        m_routing_table.LookupRoute (dst, rt);
+        clock_t retry;
+        if (rt.GetHop () < NET_DIAMETER)
+            {
+            retry = 2 * NODE_TRAVERSAL_TIME * (rt.GetHop () + TIMEOUT_BUFFER) * CLOCKS_PER_SEC/1000 +clock();
+            }
+        else
+            {
+            uint16_t backoffFactor = rt.GetRreqCnt () - 1;
+            std::cout<<"Applying binary exponential backoff factor "<<backoffFactor<<endl;
+            retry = NODE_TRAVERSAL_TIME * (1 << backoffFactor) * CLOCKS_PER_SEC/1000 + clock();
+            }
+
+        logInfo("In ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo)");
+        //First check if this has been added before
+        if (m_addressRerrReqTimer.empty())
+        {
+             m_addressRerrReqTimer.insert(std::make_pair (dst, retry)); //add request from the queue
+             m_rerr_rreq_seq.insert(std::make_pair (dst, dstSeqNo)); //add sequence number to the queue
+             m_rerr_rreq_origin.insert(std::make_pair (dst, origin)); //add origin ip to sequence
+             
+        }
+        else {
+        auto element=m_addressRerrReqTimer.find(dst);
+        if (element->first == dst)
+        {
+            //destination has been found update the scheduling now
+            auto r_retry=m_rerr_rreq_retry.find(dst); //find the retires on this RREQ
+            if (r_retry->second>RREQ_RETRIES)
+            {
+                //Remove this 
+                std::cout<<"Time "<<clock()<<"(cycles): Erasing RREQ RRER for destination "<<dst<<endl;
+            }
+            else {
+                element->second = retry;
+            }
+        }
+        else {
+            //destination not been found add it to the queue
+            m_addressRerrReqTimer.insert(std::make_pair (dst, retry));
+            m_rerr_rreq_seq.insert(std::make_pair (dst, dstSeqNo));
+            m_rerr_rreq_origin.insert(std::make_pair (dst, origin));
+
+        }
+        } 
     }
 #endif

@@ -73,9 +73,11 @@ Thread main_thread; //Thread that handles the queue
 //Origin ID     list of neighbours that RREQ has been received from
 std::map<uint8_t, std::vector<uint8_t>> firsthop_list; //list of neighbour nodes of origin from which RREQ has been received.
 
+//This has to also be destination specific
 //KEY               VALUE
-//Neighbour ID     amount of times received from neighbour
-std::map<uint8_t, uint8_t> firsthop_counter;
+//Origin ID     Map of neighbour ID with counts
+//                  KEY             VALUE
+std::map<uint8_t, std::map<uint8_t, uint8_t>> firsthop_counter;
 
 //KEY               VALUE
 //Neighbour ID     list of nodes a unique neighbour ID came from
@@ -101,7 +103,7 @@ void send_rreq(uint8_t dest);
 //Parameters
 //packet packet from RREQ message that provoked this reply
 //toOrigin table entry to route reply to the origin of the RREQ
-void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source);
+void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source, uint8_t RRER_RREQ);
 
 //Send RREP by intermediate node.
 //Parameters
@@ -109,7 +111,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
 //toOrigin    routing table entry to originator
 //gratRep indicates whether a gratuitous RREP should be unicast to destination
 //for AOMDV neighbour_source is the RREQ packet the reply is for
-void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src);
+void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ);
 
 //Send RREP_ACK.
 //Parameters
@@ -128,7 +130,7 @@ void send_reply_ack(uint8_t neighbor_add);
 // before to prevent loop construction. And when it finds any
 // node along its new path node 5 and starts sending packets via
 // node 5 to D (1) as in figure 3
-void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo);
+void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo,  uint8_t origin);
 
 //Send RERR message when no route to forward input packet.
 //
@@ -247,7 +249,7 @@ void ScheduleRreqRetry(uint8_t dst);
 //Parameters
 //dst the destination IP address
 //dstSeqNo the new SeqNo of the destination
-void ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo);
+void ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo, uint8_t origin);
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////PACKET SENDING FUNCTIONS/////////////////////////////////////////
@@ -341,7 +343,11 @@ std::map<uint8_t, uint8_t> m_rerr_rreq_retry;
 //Tracks the packets to be sent over for retrying
 //KEY   VALUE
 //dst   packet
-std::map<uint8_t, std::vector<uint8_t>> m_rerr_rreq_buffer;
+std::map<uint8_t, uint8_t> m_rerr_rreq_seq;
+//Tracks the origin node of the path to destination that is being searched for
+//KEY   VALUE
+//dst   src
+std::map<uint8_t, uint8_t> m_rerr_rreq_origin;
 
 //Repeatedly call this to check the rate of RREQ and to reschedule RREQ
 void RouteRequestTimerExpire ();
