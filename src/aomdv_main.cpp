@@ -598,6 +598,7 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
              for (int i = 0;i<current_neighbours.size();i++)
                 {
                  send_rrer(current_neighbours.at(i).m_neighborAddress, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
+                 ThisThread::sleep_for(200ms);
                 }
      }
     } 
@@ -1291,6 +1292,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
         {
             packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
             send_data(packet);
+            ThisThread::sleep_for(200ms);//Wait so network saturated
             }
         
         }
@@ -1924,6 +1926,7 @@ void message_queue_handler(void)
             else
             {
                 std::cout<<"Couldn't route forward line 1423"<<endl;
+                message_request_queue.Enqueue(handleRequest); //Put it back to end of queue. Route repair will drop packets and find new route if can't forward.
             }                
             }
             else {
@@ -2556,7 +2559,7 @@ void Hallo_Timer_Expire()
                 m_addressRerrReqTimer.erase(*i);//Deleting all entries after visited
                 m_rerr_rreq_retry.erase(*i);//Deleting all failed retry entries
                 m_rerr_rreq_seq.erase(*i);//Deleting all failed sequence numbers
-                m_rerr_rreq_origin.erase(*i);
+                m_rerr_rreq_origin.erase(*i);//Deleting sources to failed routes
                 //All packets from message queue should be removed
                 message_request_queue.DropPacketWithDst(*i);
                 std::cout<<"Time "<<clock()<<"(cycles): Deleting route entry for "<<*i<<" being dropped line 1869"<<endl;
