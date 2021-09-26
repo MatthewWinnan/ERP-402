@@ -413,6 +413,7 @@ void send_rreq(uint8_t dest)//Only client really calls this
     {
        logInfo ("Sending RREQ");
         send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0);
+        ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
        }
     } 
  
@@ -448,6 +449,7 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
              for (int i = 0;i<current_neighbours.size();i++)
                 {
                  send_rrer(current_neighbours.at(i).m_neighborAddress, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
+                 ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
                 }
      }
     } 
@@ -486,8 +488,19 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
             output.push_back(0); //When will I need to break
             output.push_back(destination_count);
             output.push_back(1);
+            for (int i =0;i<destination_count;i++)
+                {
+            //PUshing in all the destinations
+            output.push_back(m_dest.at(i));
+            output.push_back(m_dest_seq.at(i));   
+                }
+            //Clear the header trackers
             m_unreachableDstSeqNo.clear();
-           //SendRerrMessage (output, precursors);
+            m_dest.clear();
+            m_dest_seq.clear();
+            destination_count = 0;
+            //send message
+            SendRerrMessage (output, precursors);
          }
        else
          {
@@ -511,7 +524,14 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
             output.push_back(0); //When will I need to break
             output.push_back(destination_count);
             output.push_back(1);
-       //SendRerrMessage (output, precursors);
+            for (int i =0;i<destination_count;i++)
+                {
+            //PUshing in all the destinations
+            output.push_back(m_dest.at(i));
+            output.push_back(m_dest_seq.at(i));   
+                }
+            SendRerrMessage (output, precursors);
+            m_unreachableDstSeqNo.clear(); //clear unreachables so it can be used to track again
      }
    unreachable.insert (std::make_pair (nextHop, toNextHop.GetSeqNo ()));
    m_routing_table.InvalidateRoutesWithDst (unreachable);
@@ -571,6 +591,7 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
         m_rerrCount++;
         logInfo("Preparing to send RRER to: TODO add address detail");
         wait_on_radio();
+        ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
         send_data(packet);
      } 
     }  
@@ -950,6 +971,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        {
            packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
            send_data(packet);
+           ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
            }
        
        }
@@ -1287,6 +1309,11 @@ void request_queue_handler(void)
                         break;
                     case ROUTE_ERROR:
                         //Handle RERR Messages
+                        if ((packet.at(RREP_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RREP_PACKET_RECIPIENT)==255))
+                        {
+                            std::cout<<"Time "<<clock()<<"(cycles): I received an RRER"<<endl;
+                            receive_rrer(packet,packet.at(RRER_PACKET_SENDER));
+                        }
                         break;
                     case ROUTE_REPLY_ACK:
                         //Handle RRER-ACK messages
