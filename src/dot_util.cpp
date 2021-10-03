@@ -1,5 +1,4 @@
 #include "dot_util.h"
-#include "network_config.h"
 
 
 uint32_t portA[6];
@@ -7,9 +6,6 @@ uint32_t portB[6];
 uint32_t portC[6];
 uint32_t portD[6];
 uint32_t portH[6];
-
-extern uint8_t m_rreqCount;
-extern uint8_t m_rerrCount;
 
 lora::ChannelPlan* create_channel_plan() {
     lora::ChannelPlan* plan;
@@ -644,47 +640,12 @@ void sleep_restore_io() {
 int send_data(std::vector<uint8_t> data) {
     int32_t ret;
     //Keep track of the RRER and RREQ limiters in here
-    if (data.at(0)==ROUTE_REQUEST)
-    {
-        if(m_rreqCount<RREQ_RATELIMIT)
-        {
             ret = dot->send(data);
-            if (ret != mDot::MDOT_OK) {
-                logError("failed to send data to %s [%d][%s]", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway", ret, mDot::getReturnCodeString(ret).c_str());
-            } else {
-                logInfo("successfully sent data to %s", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway");
-            }
-            m_rreqCount++;
-        }
-        else {
-        ret = mDot::MDOT_ERROR;
-        }
-    }
-    else if (data.at(0)==ROUTE_ERROR)
-    {
-        if(m_rerrCount<RERR_RATELIMIT)
-        {
-            ret = dot->send(data);
-            if (ret != mDot::MDOT_OK) {
-                logError("failed to send data to %s [%d][%s]", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway", ret, mDot::getReturnCodeString(ret).c_str());
-            } else {
-                logInfo("successfully sent data to %s", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway");
-            }
-            m_rerrCount++;
-        }
-        else {
-        ret = mDot::MDOT_ERROR;
-        }
-    }
-    else 
-    {
-        ret = dot->send(data);
         if (ret != mDot::MDOT_OK) {
             logError("failed to send data to %s [%d][%s]", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway", ret, mDot::getReturnCodeString(ret).c_str());
         } else {
             logInfo("successfully sent data to %s", dot->getJoinMode() == mDot::PEER_TO_PEER ? "peer" : "gateway");
         }
-    }
 
     return ret;
 }

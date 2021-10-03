@@ -307,7 +307,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
     for (int i = 0;i<hop_list.size();i++)
     {
         send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source); 
-        ThisThread::sleep_for(100ms); //Small gap in sending receiving
+        ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         //TODO find out if fine
         //TODO find out if precursor needed
     }
@@ -370,7 +370,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
         {
    //sending rrep towards origin route entry next hop
     send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source);
-    ThisThread::sleep_for(100ms); //Small gap in sending receiving
+    ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         }
   
    // Generating gratuitous RREPs
@@ -389,7 +389,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
         {
    //sending rrep towards origin route entry next hop
     send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source);
-    ThisThread::sleep_for(100ms); //Small gap in sending receiving
+    ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         }
      }
     }      
@@ -499,7 +499,7 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
        {
             send_rrer(*i, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
            //Wait between no to overload
-           ThisThread::sleep_for(TX_NEXT_WAIT);
+            ThisThread::sleep_for(TX_NEXT_WAIT);
        }
      }
    else
@@ -509,6 +509,7 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
              for (int i = 0;i<current_neighbours.size();i++)
                 {
                     send_rrer(current_neighbours.at(i).m_neighborAddress, device_ip_address, 0, 1, ttl_m, m_dest, m_dest_seq);
+                    ThisThread::sleep_for(TX_NEXT_WAIT);
                 }
      }
     } 
@@ -606,7 +607,11 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
            logInfo ("one precursor => unicast RERR to: TODO morew info make clear");
            packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
            packet.at(RRER_PACKET_SENDER) = device_ip_address;
-           send_data(packet);
+            if(m_rerrCount<RERR_RATELIMIT)
+                {
+                    m_rerrCount++;
+                    send_data(packet);
+                }  
          }
        return;
      }
@@ -631,7 +636,11 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
         packet.at(RRER_PACKET_RECIPIENT) = *i;
         packet.at(RRER_PACKET_SENDER) = device_ip_address;
         logInfo("Preparing to send RRER to: TODO add address detail");
-        send_data(packet);
+        if(m_rerrCount<RERR_RATELIMIT)
+        {
+            m_rerrCount++;
+            send_data(packet);
+        }
      } 
     }  
     
@@ -1163,7 +1172,11 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
         if ((current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_PACKET_ORIGIN_IP)) && (current_neighbours.at(i).m_neighborAddress!=packet.at(RREQ_SENDER)))
         {
             packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
-            send_data(packet);
+            if(m_rerrCount<RREQ_RATELIMIT)
+                {
+                    m_rreqCount++;
+                    send_data(packet);
+                }
             }
         
         }
@@ -1505,7 +1518,7 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
     {
         //Send RREP to every route back to neighbour
         packet.at(RREP_PACKET_RECIPIENT) = hop_list_origin.at(i);
-        ThisThread::sleep_for(200ms);
+        ThisThread::sleep_for(TX_NEXT_WAIT);
         send_data(packet); //Sending reply back to origin
     }
     }    
@@ -1879,26 +1892,32 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //   |                    acknowledge the reply                      |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    std::vector<uint8_t> output;
-    uint8_t type = 1;
-    //INsert the data into the packet
-    output.push_back(type);
-    output.push_back(recipient_address);
-    output.push_back(sender_address);
-    output.push_back(hop_count);
-    output.push_back(rreq_id);
-    output.push_back(destination_add);
-    output.push_back(dest_seq_num);
-    output.push_back(source_add);
-    output.push_back(origin_seq_num);
-    output.push_back(seq_valid);
-    output.push_back(g);
-    output.push_back(m_ttl);
-    output.push_back(r_ack);
-    output.push_back(neighbour_source);
-    //wait for the radio to be done
-    wait_on_radio();
-    return send_data(output);
+        if(m_rreqCount<RREQ_RATELIMIT)
+        {
+            std::vector<uint8_t> output;
+            uint8_t type = 1;
+            //INsert the data into the packet
+            output.push_back(type);
+            output.push_back(recipient_address);
+            output.push_back(sender_address);
+            output.push_back(hop_count);
+            output.push_back(rreq_id);
+            output.push_back(destination_add);
+            output.push_back(dest_seq_num);
+            output.push_back(source_add);
+            output.push_back(origin_seq_num);
+            output.push_back(seq_valid);
+            output.push_back(g);
+            output.push_back(m_ttl);
+            output.push_back(r_ack);
+            output.push_back(neighbour_source);
+            //wait for the radio to be done
+            wait_on_radio();
+            return send_data(output);
+        }
+        else {
+        return  -1;
+        }
     
     
     }
@@ -1985,24 +2004,31 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
 //                  The sequence number in the route table entry for
 //                  the destination listed in the previous Unreachable
 //                  Destination IP Address field.
-    std::vector<uint8_t> output;
-    uint8_t type = 3;
-    //INsert the data into the packet
-    output.push_back(type);
-    output.push_back(recipient_add);
-    output.push_back(sender_address);
-    output.push_back(N);
-    output.push_back(DestCount);
-    output.push_back(ttl);
-    for (int i =0;i<DestCount;i++)
-    {
-     //PUshing in all the destinations
-     output.push_back(u_dest.at(i));
-     output.push_back(u_dest_seq.at(i));   
+        if(m_rerrCount<RERR_RATELIMIT)
+        {
+            m_rerrCount++;
+            std::vector<uint8_t> output;
+            uint8_t type = 3;
+            //INsert the data into the packet
+            output.push_back(type);
+            output.push_back(recipient_add);
+            output.push_back(sender_address);
+            output.push_back(N);
+            output.push_back(DestCount);
+            output.push_back(ttl);
+            for (int i =0;i<DestCount;i++)
+            {
+            //PUshing in all the destinations
+            output.push_back(u_dest.at(i));
+            output.push_back(u_dest_seq.at(i));   
+                }
+            //wait for the radio to be done
+            wait_on_radio();
+            return send_data(output);
         }
-    //wait for the radio to be done
-    wait_on_radio();
-    return send_data(output);
+        else {
+        return -1;
+        }
     }    
     
 int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl)

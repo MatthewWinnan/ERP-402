@@ -6,7 +6,6 @@
 #include "ChannelPlans.h"
 #include "MTSLog.h"
 #include "MTSText.h"
-#include "example_config.h"
 # include "network_config.h"
 
 extern mDot* dot;

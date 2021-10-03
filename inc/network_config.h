@@ -22,10 +22,11 @@
 #define AODV 1
 #define AOMDV 2
 #define AOMDV_LD_LR 3
+#define LR_EE_AOMDV_LD_LR 4
 
 //Select the current protocol version
 #if !defined(ACTIVE_VERSION)
-#define ACTIVE_VERSION  AOMDV
+#define ACTIVE_VERSION  LR_EE_AOMDV_LD_LR
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS
@@ -65,7 +66,7 @@
 #define RREP_TIMEOUT 5000
 #define RRER_DEST_LIMIT 6 //limits the max size of destnumber in rrer packet
 #define ENABLE_HALLO 1 //enables hallo packets
-#define TX_NEXT_WAIT 200ms
+#define TX_NEXT_WAIT 20ms
 // #define EVENTS_EVENT_SIZE 10
 // DEFINING THE INDEX OF PARTS OF PACKETS
 //TEMPLATE BEING USED /////
@@ -184,7 +185,7 @@ typedef enum {
 ////////////////////////////////////////////////
 /////ADDITIONAL AOMDV CONFIGURATIONS////////////
 ////////////////////////////////////////////////
-#if ACTIVE_VERSION==AOMDV || ACTIVE_VERSION==AOMDV_LD_LR
+#if ACTIVE_VERSION==AOMDV || ACTIVE_VERSION==AOMDV_LD_LR || ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
 #define RREQ_PACKET_ORIGIN_NEIGH 13
 #define RREQ_PACKET_RRER_RREQ 14
 #define RREP_PACKET_ORIGIN_NEIGH 11
