@@ -193,6 +193,18 @@ typedef enum {
 #define K_REPEATS 3
 #endif
 
+#if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
+
+#define R_ACK_PACKET_TYPE 0
+#define R_ACK_PACKET_RECIPIENT 1
+#define R_ACK_PACKET_SENDER 2
+#define R_ACK_PACKET_TTL 3
+#define R_ACK_PACKET_LINK_ONE 4
+#define R_ACK_PACKET_LINK_TWO 5
+#define R_ACK_PACKET_LINK_THREE 6
+#define R_ACK_PACKET_LINK_FOUR 7
+
+#endif
 
 #endif
 

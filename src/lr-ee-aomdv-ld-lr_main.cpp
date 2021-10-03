@@ -160,11 +160,13 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        time_epoch.attach(&QueueEpochTimerEvent,10s);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
         main_queue.event(request_queue_handler);
         main_queue.event(message_queue_handler);
+        main_queue.event(EpochTimerEvent);
     #elif ACTIVE_USER == ROUTING_NODE
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         rrer_rreq_t.attach(&QueueRerrRouteRequestTimerExpire,4s);
@@ -173,6 +175,7 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        time_epoch.attach(&QueueEpochTimerEvent,10s);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
@@ -180,6 +183,7 @@ void start()
         main_queue.event(RouteRequestTimerExpire);
         main_queue.event(message_queue_handler);
         main_queue.event(RouteRerrRequestTimerExpire);
+        main_queue.event(EpochTimerEvent);
     #elif ACTIVE_USER == CLIENT_NODE
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
@@ -187,12 +191,14 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        time_epoch.attach(&QueueEpochTimerEvent,10s);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
         main_queue.event(request_queue_handler);
         main_queue.event(RouteRequestTimerExpire);
         main_queue.event(message_queue_handler);
+        main_queue.event(EpochTimerEvent);
         //FOR NOW SINCE TESTING SEND A RREQ STRAIGHT
         // send_rreq(destination_ip_address); 
     #endif  
@@ -266,8 +272,18 @@ bool RemoveUnDestination (std::pair<uint8_t, uint32_t> & un )
  
 void send_reply_ack(uint8_t neighbor_add)
 {
-       logInfo ("Sending reply ack to ");
-   send_ack(neighbor_add, device_ip_address, 1);
+    //I am using this to send the information of link quality back to sender
+       std::cout<<"Time "<<clock()<<"(cycles) Sending reply ack to "<<neighbor_add<<endl;
+       auto entry = neighbour_rx_prev.find(neighbor_add);
+       if (entry->first == neighbor_add)
+       {
+           //found so add amount
+            send_ack(neighbor_add, device_ip_address, 1,entry->second);
+       }
+       else {
+           //I have no count so don't know the neighbour
+       send_ack(neighbor_add, device_ip_address, 1,0);
+       }
     }
     
 void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8_t neighbour_source, uint8_t RRER_RREQ)
@@ -904,7 +920,8 @@ void ProcessHello(std::vector<uint8_t> packet)
      {
        myNeighbour.Update (packet.at(RREP_PACKET_DESTINATION_IP),HELLO_INTERVAL*ALLOWED_HELLO_LOSS*CLOCKS_PER_SEC);
      }
-    myNeighbour.Print();
+    myNeighbour.Print(); //printing to view update
+    send_reply_ack(packet.at(RREP_PACKET_DESTINATION_IP));//send reply back of current rx received from neighbour
     }
 
 
@@ -1275,8 +1292,11 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             packet.at(RREQ_RECIPIENT) = current_neighbours.at(i).m_neighborAddress;
             if(m_rerrCount<RREQ_RATELIMIT)
             {
-                m_rreqCount++;
-                send_data(packet);
+                if (send_data(packet) == mDot::MDOT_OK)
+                {
+                    m_rreqCount++;
+                    Update_neighbour_tx(packet.at(RREQ_RECIPIENT));
+                }
             }
             ThisThread::sleep_for(TX_NEXT_WAIT);//Wait so network saturated
             }
@@ -1644,28 +1664,34 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
     packet.at(RREP_PACKET_SENDER) = device_ip_address;
     std::vector<uint8_t> hop_list_origin = toOrigin.GetNextHop(packet.at(RREP_PACKET_ORIGIN_NEIGH));
     for(int i = 0;i<hop_list_origin.size();i++)
-    {
-        //Send RREP to every route back to neighbour
-        packet.at(RREP_PACKET_RECIPIENT) = hop_list_origin.at(i);
-        ThisThread::sleep_for(TX_NEXT_WAIT);
-        send_data(packet); //Sending reply back to origin
-    }
+        {
+            //Send RREP to every route back to neighbour
+            packet.at(RREP_PACKET_RECIPIENT) = hop_list_origin.at(i);
+            ThisThread::sleep_for(TX_NEXT_WAIT);
+            if (send_data(packet) == mDot::MDOT_OK)
+            {
+                    Update_neighbour_tx(packet.at(RREP_PACKET_RECIPIENT));
+            }
+        }
     }    
  
  
-void receive_ack (uint8_t neigh_add)
+void receive_ack (std::vector<uint8_t> packet)
 {
         //Create dummy routelist for entry initialization
     std::vector<RouteEntity> route_list;
-    logDebug ("Received an acknowledge from ");
+    std::cout<<"Time "<<clock()<<"(cycles) Received an acknowledge from "<<packet.at(R_ACK_PACKET_SENDER)<<endl;
    RoutingTableEntry rt =  RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
-   if (m_routing_table.LookupRoute (neigh_add, rt))
+   if (m_routing_table.LookupRoute (packet.at(R_ACK_PACKET_SENDER), rt))
      {
-       logDebug("Route Exists set flag Valid TODO cancel ack timer");
+       std::cout<<"Time "<<clock()<<"(cycles) Route Exists set flag Valid TODO cancel ack timer "<<endl;
        //rt.m_ackTimer.Cancel ();
        rt.SetFlag (VALID);
        m_routing_table.Update (rt);
      }   
+     //stitch the bytes together
+     uint32_t link_value = (packet.at(R_ACK_PACKET_LINK_FOUR) << 24) | (packet.at(R_ACK_PACKET_LINK_THREE) << 16) | (packet.at(R_ACK_PACKET_LINK_TWO) << 8) | packet.at(R_ACK_PACKET_LINK_ONE);
+     Update_neighbour_rx_ack(packet.at(R_ACK_PACKET_SENDER),  link_value);
     }
 
 void receive_rrer(std::vector<uint8_t> p, uint8_t src)
@@ -1823,6 +1849,11 @@ void request_queue_handler(void)
                         break;
                     case ROUTE_REPLY_ACK:
                         //Handle RRER-ACK messages
+                        if ((packet.at(R_ACK_PACKET_RECIPIENT)==device_ip_address) || (packet.at(R_ACK_PACKET_RECIPIENT)==255))
+                        {
+                            std::cout<<"Time "<<clock()<<"(cycles): I received an R_ACK"<<endl;
+                            receive_ack(packet);
+                        }
                         break;
                     case HALLO_MESSAGE:
                         #if ACTIVE_USER == DESTINATION_NODE
@@ -2018,8 +2049,15 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
             output.push_back(neighbour_source);
             output.push_back(rreq_rrer);
             //wait for the radio to be done
-            wait_on_radio();
-            return send_data(output);
+            if(send_data(output) == mDot::MDOT_OK)
+            {
+                Update_neighbour_tx(recipient_address);
+                return mDot::MDOT_OK;
+            }
+            else 
+            {
+                return mDot::MDOT_TX_ERROR;
+            }
         }   
         else {
         return -1;
@@ -2045,7 +2083,6 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
 //   |                    TTL                      |
 //   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //Modification for AOMDV-LR added rrer_rreq to indentify premptive route recovery RREP packets from normal RREP packets
-
     std::vector<uint8_t> output;
     uint8_t type = 2;
     //INsert the data into the packet
@@ -2066,9 +2103,15 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     //wait for the radio to be done
     std::cout<<"Sending "<<output.size()<<" bytes "<<endl;
     wait_on_radio();
-    return send_data(output);
-    
-    
+    if(send_data(output) == mDot::MDOT_OK)
+        {
+            Update_neighbour_tx(recipient_add);
+            return mDot::MDOT_OK;
+        }
+        else 
+        {
+            return mDot::MDOT_TX_ERROR;
+        }
     }
 
 int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount , uint8_t ttl, std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq)
@@ -2129,7 +2172,15 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
                 }
             //wait for the radio to be done
             wait_on_radio();
-            return send_data(output);
+            if(send_data(output) == mDot::MDOT_OK)
+            {
+                Update_neighbour_tx(recipient_add);
+                return mDot::MDOT_OK;
+            }
+            else 
+            {
+                return mDot::MDOT_TX_ERROR;
+            }
         }
         else
         {
@@ -2137,7 +2188,7 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
         }
     }    
     
-int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl)
+int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl, uint32_t link_count)
 {
 //        0                   1
 //    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
@@ -2148,6 +2199,7 @@ int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl)
 //      Type        4
 //
 //      Reserved    Sent as 0; ignored on reception.
+    Update_neighbour_tx(recipient_address);
     std::vector<uint8_t> output;
     uint8_t type = 4;
     //INsert the data into the packet
@@ -2155,9 +2207,21 @@ int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl)
     output.push_back(recipient_address);
     output.push_back(sender_address);
     output.push_back(ttl);
-    //wait for the radio to be done
-    wait_on_radio();
-    return send_data(output);
+    //Unpacking count to be able to send over the LoRa channel
+    output.push_back(link_count & 0xff);
+    output.push_back((link_count >> 8) & 0xff);
+    output.push_back((link_count >> 16) & 0xff);
+    output.push_back((link_count >> 24) & 0xff);
+
+    if(send_data(output) == mDot::MDOT_OK)
+    {
+        Update_neighbour_tx(recipient_address);
+        return mDot::MDOT_OK;
+    }
+    else 
+    {
+        return mDot::MDOT_TX_ERROR;
+    }
     }  
     
 int send_hallo(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack)
@@ -2220,6 +2284,7 @@ int send_message_data(uint8_t recipient_address, uint8_t sender_address,uint8_t 
     //ttl-> ttl number to be set
     //packet-> the data to be forwarded
     /////////////////////////////////////////////////////////
+    Update_neighbour_tx(recipient_address);
     uint8_t type = 6;
     packet.at(MESSAGE_PACKET_TTL) = ttl;
     packet.at(MESSAGE_PACKET_DESTINATION) = dest;
@@ -2229,7 +2294,15 @@ int send_message_data(uint8_t recipient_address, uint8_t sender_address,uint8_t 
     packet.at(MESSAGE_PACKET_TYPE) = type;
     //wait for the radio to be done
     wait_on_radio();
-    return send_data(packet);
+    if(send_data(packet) == mDot::MDOT_OK)
+        {
+            Update_neighbour_tx(recipient_address);
+            return mDot::MDOT_OK;
+        }
+        else 
+        {
+            return mDot::MDOT_TX_ERROR;
+        }
 }
 
 ///////////////////////////////////////////////////
@@ -2674,4 +2747,86 @@ void Hallo_Timer_Expire()
         }
         } 
     }
+
+//Call this to Queue the epoch event
+void QueueEpochTimerEvent()
+{
+    main_queue.call(EpochTimerEvent);
+}
+
+//Call this to do epoch based calculations and setup table entries etc
+void EpochTimerEvent()
+{
+    //saves this time step to previous
+    m_tx_count_prev = m_tx_count; 
+    m_rx_count_prev = m_rx_count;
+    //Save current epoch data to be used during calculations
+    neighbour_tx_prev.clear();
+    for (std::map<uint8_t,uint32_t>::const_iterator i = neighbour_tx.begin (); i != neighbour_tx.end (); ++i)
+    {
+        neighbour_tx_prev.insert(std::make_pair(i->first, i->second));
+    }
+    neighbour_rx_prev.clear();
+    for (std::map<uint8_t,uint32_t>::const_iterator i = neighbour_rx.begin (); i != neighbour_rx.end (); ++i)
+    {
+        neighbour_rx_prev.insert(std::make_pair(i->first, i->second));
+    }
+    //Reset amount trackers to track current epoch
+    m_tx_count = 0;
+    m_rx_count = 0;
+    neighbour_tx.clear();
+    neighbour_rx.clear();
+}
+
+void Update_neighbour_tx(uint8_t neigh_address)
+{
+//Can at the same time increase tx amount since the same
+    m_tx_count++;
+    if (neighbour_tx.empty())
+    {
+        //empty add a new entry
+        neighbour_tx.insert(std::make_pair(neigh_address, 1));
+    }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_tx.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second++;
+        }
+        else {
+        //insert a new element
+        neighbour_tx.insert(std::make_pair(neigh_address, 1));
+        }
+
+    }
+}
+
+void Update_neighbour_rx_ack(uint8_t neigh_address, uint32_t receive_count)
+{
+//Can at the same time increase rx amount since the same
+    m_rx_count++;
+    if (neighbour_rx_ack.empty())
+    {
+        //empty add a new entry
+        neighbour_rx_ack.insert(std::make_pair(neigh_address, receive_count));
+    }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_rx_ack.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second = receive_count;
+        }
+        else {
+        //insert a new element
+        neighbour_rx_ack.insert(std::make_pair(neigh_address, receive_count));
+        }
+
+    }
+}
 #endif

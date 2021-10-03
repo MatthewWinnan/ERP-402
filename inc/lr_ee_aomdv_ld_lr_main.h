@@ -1,11 +1,12 @@
 #include "network_config.h"
+#include <utility>
 
 #if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
 
 #ifndef __LR_EE_AOMDV_LD_LR_MAIN_H__
 #define __LR_EE_AOMDV_LD_LR_MAIN_H__
 #include "dot_util.h"
-#include "RadioEvent.h"
+#include "RadioEvent_lr_ee_amdv.h"
 
 
 #include <algorithm>  
@@ -65,6 +66,40 @@ IdCache m_rreqIdCache = IdCache(DUBLICATE_CACHE_TIMEOUT*CLOCKS_PER_SEC/1000);
 uint8_t m_rreqCount;
 uint8_t m_rerrCount;
 uint8_t m_neighbourCount; //how many tries to reach neighbour
+uint32_t m_tx_count; //keeps track of messages sent per epoch count
+uint32_t m_rx_count; //keeps track of messages received per epoch count
+uint32_t m_tx_count_prev; //keeps track of messages sent per epoch count -1
+uint32_t m_rx_count_prev; //keeps track of messages received per epoch count -1
+
+//This stores the amount of messages sent i->j for epoch
+//KEY               VALUE
+//Neighbour Add     Tx amount
+std::map<uint8_t,uint32_t> neighbour_tx;
+
+//This stores the amount of messages received j->i for epoch
+//KEY               VALUE
+//Neighbour Add     Rx amount
+std::map<uint8_t,uint32_t> neighbour_rx;
+
+
+//This stores the amount of messages sent i->j for epoch-1
+//KEY               VALUE
+//Neighbour Add     Tx amount
+std::map<uint8_t,uint32_t> neighbour_tx_prev;
+
+//This stores the amount of messages received j->i for epoch-1
+//KEY               VALUE
+//Neighbour Add     Rx amount
+std::map<uint8_t,uint32_t> neighbour_rx_prev;
+
+//This stores the amount of messages received j->i per acknowledge
+//KEY               VALUE
+//Neighbour Add     Rx amount
+std::map<uint8_t,uint32_t> neighbour_rx_ack;
+
+void Update_neighbour_tx(uint8_t neigh_address);
+
+void Update_neighbour_rx_ack(uint8_t neigh_address, uint32_t receive_count);
 
 EventQueue main_queue(32 * EVENTS_EVENT_SIZE); //this will call an event in IRQ so the process can be handled safely.
 Thread main_thread; //Thread that handles the queue
@@ -200,7 +235,7 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src);
 //Receive RREP_ACK.
 //Parameters
 //neighbor    neighbor address
-void receive_ack (uint8_t neigh_add);
+void receive_ack (std::vector<uint8_t> packet);
 
 //Receive RERR.
 //
@@ -260,7 +295,7 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
 
 int send_hallo(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack);
 
-int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl);
+int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl, uint32_t link_count);
 
 int send_message_data(uint8_t recipient_address, uint8_t sender_address, uint8_t origin, uint8_t dest, uint8_t ttl, std::vector<uint8_t> packet);
 
@@ -299,6 +334,8 @@ Ticker message_t;
 Ticker rreq_t;
 //Main RRER RREQ Thread
 Ticker rrer_rreq_t;
+//Main Epoch ticker
+Ticker time_epoch;
 
 ///Flags to keep track of errors
 bool hallo_flag;
@@ -356,6 +393,10 @@ void QueueRouteRequestTimerExpire();
 void RouteRerrRequestTimerExpire ();
 //Queues the function into event so it exists the IRQ
 void QueueRerrRouteRequestTimerExpire();
+//Call this to do epoch based calculations and setup table entries etc
+void EpochTimerEvent();
+//Call this to Queue the epoch event
+void QueueEpochTimerEvent();
 
 void AckTimerExpire (uint8_t neighbor, clock_t blacklistTimeout);
 
