@@ -28,17 +28,23 @@ enum RouteFlags
 class RouteEntity
 {
 public:
-    RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s);
+    RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre);
     ~RouteEntity();
 
     uint8_t get_next_hop() const;
     uint8_t get_hopcount();
     uint8_t get_neighbour_source() const;
+    uint32_t get_cetx() const;
+    uint32_t get_cete() const;
+    uint32_t get_mre() const;
     RouteFlags get_status() const;
 
     void set_next_hop(uint8_t next);
     void set_hopcount(uint8_t  hop);
     void set_neighbour_source(uint8_t n_s);
+    void set_cetx(uint32_t cetx);
+    void set_cete(uint32_t cete);
+    void set_mre(uint32_t mre);
     void set_status (RouteFlags sts);
 
         //\{
@@ -55,6 +61,9 @@ private:
     uint8_t next_hop;
     uint8_t hopcount;
     uint8_t neighbour_source;
+    uint32_t m_cetx;
+    uint32_t m_cete;
+    uint32_t m_mre;
     RouteFlags status;
     std::vector<uint8_t> m_precursorList;
 
@@ -68,6 +77,9 @@ private:
     bool m_validSeqNo;
     uint8_t m_seqNo;
     uint8_t m_advertised_hopcount;
+    uint32_t m_advertised_cetx;
+    uint32_t m_advertised_cete;
+    uint32_t m_advertised_mre;
     clock_t m_lifeTime;
 //    uint8_t m_destination;
     RouteFlags m_flag;
@@ -103,10 +115,14 @@ public:
         m_route_list.clear();
     }
 
-    void update_advertise_hop()
+    void update_advertise_parameters()
     {
+        //Here every parameter is updated to the advertised version
         //On every sequence number update the advertised hopcount
         uint8_t max_hop = 0;
+        uint32_t max_advertised_cetx = 0;
+        uint32_t max_advertised_cete = 0;
+        uint32_t max_advertised_mre = 2808348671;
         if (m_route_list.empty())
         {
             //It is empty so make next hop NET_DIAMETER
@@ -119,8 +135,23 @@ public:
                 {
                     max_hop = i->get_hopcount(); 
                 }
+                if (i->get_cetx()>max_advertised_cetx)
+                {
+                    max_advertised_cetx = i->get_cetx();
+                }
+                if (i->get_cete()>max_advertised_cete)
+                {
+                    max_advertised_cete = i->get_cete();
+                }
+                if (i->get_mre()<max_advertised_mre)
+                {
+                    max_advertised_mre = i->get_mre();
+                }
             }        
         }
+    m_advertised_cetx = max_advertised_cetx;
+    m_advertised_cete = max_advertised_cete;
+    m_advertised_mre = max_advertised_mre;
     m_advertised_hopcount = max_hop;
     }
 
@@ -329,6 +360,21 @@ struct IsNeigh
     uint8_t GetHop () const
     {
         return m_advertised_hopcount;
+    }
+
+    uint32_t GetCetx() const
+    {
+        return m_advertised_cetx;
+    }
+
+    uint32_t GetCete() const
+    {
+        return m_advertised_cete;
+    }
+
+    uint32_t GetMre() const
+    {
+        return m_advertised_mre;
     }
 
     void SetLifeTime (clock_t lt)

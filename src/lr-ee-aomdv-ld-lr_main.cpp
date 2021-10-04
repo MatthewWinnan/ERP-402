@@ -149,6 +149,11 @@ void start()
         m_rreqCount = 0;
         m_rerrCount = 0;
         m_neighbourCount = 0;
+        m_tx_count = 0; //keeps track of messages sent per epoch count
+        m_rx_count = 0; //keeps track of messages received per epoch count
+        m_tx_count_prev = 0; //keeps track of messages sent per epoch count -1
+        m_rx_count_prev = 0;
+        START_BATTERY = 650 * PRECISION * 360;
         //////////////////////////////////////
     ///Here is the main event specifiers//
     //////////////////////////////////////
@@ -160,7 +165,7 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
-        time_epoch.attach(&QueueEpochTimerEvent,10s);
+        time_epoch.attach(&QueueEpochTimerEvent,EPOCH_CHRONO);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
@@ -175,7 +180,7 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
-        time_epoch.attach(&QueueEpochTimerEvent,10s);
+        time_epoch.attach(&QueueEpochTimerEvent,EPOCH_CHRONO);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
@@ -191,7 +196,7 @@ void start()
         message_t.attach(&queue_message_handler,1s);
         rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
         rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
-        time_epoch.attach(&QueueEpochTimerEvent,10s);
+        time_epoch.attach(&QueueEpochTimerEvent,EPOCH_CHRONO);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
@@ -299,7 +304,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
        m_sequence++;
      }  
     //If a request is sent update the advertised hop count
-    toOrigin.update_advertise_hop();                                
+    toOrigin.update_advertise_parameters();                                
     uint8_t ttl =toOrigin.GetHop ();
     //Sends the RREP now
     //send_rrep( toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl);
@@ -310,7 +315,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
     std::vector<uint8_t> hop_list = toOrigin.GetNextHop(packet.at(RREQ_PACKET_ORIGIN_NEIGH)); 
     for (int i = 0;i<hop_list.size();i++)
     {
-        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source,RRER_RREQ); 
+        send_rrep(hop_list.at(i),device_ip_address,toOrigin.GetDestination (), packet.at(RREQ_PACKET_DESTINATION_IP), 0, 0, RREP_TIMEOUT*CLOCKS_PER_SEC/1000, m_sequence, ttl,0,neighbour_source,RRER_RREQ,0,0,START_BATTERY); 
         ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         //TODO find out if fine
         //TODO find out if precursor needed
@@ -318,7 +323,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
      }
     
 //FOr AOMDV I need to know neighbour of RREQ when sending intermediate reply
-void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ)
+void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ, std::vector<uint8_t> packet)
 {
        logInfo ("Sending Reply By Intermediate Node");
        //Generate the RREP message parameters
@@ -330,6 +335,21 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
     uint8_t lifetime_m = toDst.GetLifeTime ()-clock();
     uint8_t r_ack_m = 0;
     uint8_t ttl_m = toOrigin.GetHop ();
+    //Obtaining CETX up to the point
+    uint32_t m_cetx = (packet.at(RREQ_PACKET_CETX_FOUR) << 24) | (packet.at(RREQ_PACKET_CETX_THREE) << 16) | (packet.at(RREQ_PACKET_CETX_TWO) << 8) | packet.at(RREQ_PACKET_CETX_ONE);
+    //Update it to the total
+    auto entry = neighbour_etx.find(src);
+    if (entry->first == src)
+    {
+            //found so set the cetx field 
+        m_cetx += entry->second;
+    }
+    else {
+        std::cout<<"Time "<<clock()<<"(cycles) neighbour_etx entry not found"<<endl;
+        m_cetx += PRECISION;
+        }
+
+
     //Dummy route list to feed in roujte enrty route
     std::vector<RouteEntity> route_list;
    /* If the node we received a RREQ for is a neighbor we are
@@ -364,16 +384,19 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
     }
    m_routing_table.Update (toDst);
    m_routing_table.Update (toOrigin);
-   #if ACTIVE_VERSION == AOMDV
    //Everytime a request is sent update advertised hop count
-   toDst.update_advertise_hop();
-   toOrigin.update_advertise_hop();
-   #endif
-
+   toDst.update_advertise_parameters();
+   toOrigin.update_advertise_parameters();
+   uint32_t min_mre = toDst.GetMre();
+   if (min_mre>START_BATTERY)
+   {
+       min_mre = START_BATTERY;
+   }
     for(int j = 0;j<hop_list_origin.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source,0);
+   //With LR_EE mode the cetx cete and mre back will be estimated based on the advertised amount
+    send_rrep(hop_list_origin.at(j), device_ip_address, source_m,dest_m,prefix_m,hops_m,lifetime_m,dest_seq_m,ttl_m,r_ack_m,neighbour_source,0,toDst.GetCetx(),toDst.GetCete(),min_mre);
     ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         }
   
@@ -392,7 +415,7 @@ void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry &
            for(int j = 0;j<hop_list_Dst.size();j++)
         {
    //sending rrep towards origin route entry next hop
-    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source,RRER_RREQ);
+    send_rrep(hop_list_Dst.at(j), device_ip_address, source_g,dest_g,prefix_g,hops_g,lifetime_g,dest_seq_g,ttl_g,r_ack_g,neighbour_source,RRER_RREQ,toDst.GetCetx(),toDst.GetCete(),min_mre);
     ThisThread::sleep_for(TX_NEXT_WAIT); //Small gap in sending receiving
         }
      }
@@ -440,7 +463,7 @@ void send_rreq(uint8_t dest)//Only client really calls this
        rt.SetLifeTime (NET_TRAVERSAL_TIME);
        m_routing_table.Update (rt);
         //Whenever node i sends request update advertised hop to d
-        rt.update_advertise_hop();
+        rt.update_advertise_parameters();
      }
    else
      {
@@ -455,7 +478,7 @@ void send_rreq(uint8_t dest)//Only client really calls this
        newEntry.SetFlag (IN_SEARCH);
        m_routing_table.AddRoute (newEntry,0);
         //Whenever node i sends request update advertised hop to d
-        newEntry.update_advertise_hop();
+        newEntry.update_advertise_parameters();
      }
      
    update_node_seq(1,1);
@@ -470,7 +493,18 @@ void send_rreq(uint8_t dest)//Only client really calls this
     for (int i = 0;i<current_neighbours.size();i++)
     {
         logInfo ("Sending RREQ");
-        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,0);//I know first neighbours from origin so format packet according
+        // uint32_t m_cetx;
+        // auto entry = neighbour_etx.find(current_neighbours.at(i).m_neighborAddress);
+        // if (entry->first == current_neighbours.at(i).m_neighborAddress)
+        // {
+        //     //found so set the cetx field 
+        //     m_cetx = entry->second;
+        // }
+        // else {
+        //     std::cout<<"Time "<<clock()<<"(cycles) neighbour_etx entry not found"<<endl;
+        //     m_cetx = PRECISION;
+        // }
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, reply_seq_dest, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,0,0,0, START_BATTERY );//I know first neighbours from origin so format packet according
         ThisThread::sleep_for(TX_NEXT_WAIT);      
        }
     } 
@@ -530,7 +564,7 @@ void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
        rt.SetSeqNo(dstSeqNo); //set's new sequence number to updated version
        m_routing_table.Update (rt);
         //Whenever node i sends request update advertised hop to d
-        rt.update_advertise_hop();
+        rt.update_advertise_parameters();
      }
    else
      {
@@ -545,7 +579,7 @@ void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
        newEntry.SetFlag (IN_SEARCH);
        m_routing_table.AddRoute (newEntry,0);
         //Whenever node i sends request update advertised hop to d
-        newEntry.update_advertise_hop();
+        newEntry.update_advertise_parameters();
      }
      
    update_node_seq(1,1);
@@ -558,7 +592,18 @@ void SendRreqWhenNoRouteForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
     for (int i = 0;i<current_neighbours.size();i++)
     {
         logInfo ("Sending RREQ");
-        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, dstSeqNo, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,1);//I know first neighbours from origin so format packet according
+        // uint32_t m_cetx;
+        // auto entry = neighbour_etx.find(current_neighbours.at(i).m_neighborAddress);
+        // if (entry->first == current_neighbours.at(i).m_neighborAddress)
+        // {
+        //     //found so set the cetx field 
+        //     m_cetx = entry->second;
+        // }
+        // else {
+        //     std::cout<<"Time "<<clock()<<"(cycles) neighbour_etx entry not found"<<endl;
+        //     m_cetx = PRECISION;
+        // }
+        send_rreq(current_neighbours.at(i).m_neighborAddress, device_ip_address, device_ip_address, destination_ip_address,0, m_requestId, dstSeqNo, reply_seq_origin, sseq_known_reply ,1,ttl,0,current_neighbours.at(i).m_neighborAddress,1,0,0,START_BATTERY);//I know first neighbours from origin so format packet according
          ThisThread::sleep_for(TX_NEXT_WAIT);
        }
     //Schedule a wait thing to wait to RREQ again depedning on repeats.
@@ -622,7 +667,7 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
             RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address); //modify table entries routes
             if (m_routing_table.LookupRoute (i->first, toDst))
             {
-                RouteEntity remover = RouteEntity(nextHop,0,0);
+                RouteEntity remover = RouteEntity(nextHop,0,0,0,0,0);
                 if(toDst.removeSpecificEntity(remover))
                 {
                     //was removed
@@ -642,7 +687,7 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
                         unreachable.insert (std::make_pair (i->first, i->second));
                     }
                     else {
-                    toDst.update_advertise_hop(); //updating advertised hop
+                    toDst.update_advertise_parameters(); //updating advertised hop
                     toDst.update_LoRa_path();
                     }
                 }
@@ -894,7 +939,7 @@ void ProcessHello(std::vector<uint8_t> packet)
         RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_DESTINATION_IP),1,packet.at(packet.at(RREP_PACKET_DESTINATION_IP)));
         newEntry.SetValidSeqNo(true);
         newEntry.addRoutingEntity(newEntity);
-        newEntry.update_advertise_hop();
+        newEntry.update_advertise_parameters();
         newEntry.update_LoRa_path();
         newEntry.SetNextHop();
        m_routing_table.AddRoute (newEntry,0);
@@ -1096,7 +1141,35 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
     }
    #endif
 
-  
+    //Extract info from packets
+    uint32_t m_cetx = (packet.at(RREQ_PACKET_CETX_FOUR) << 24) | (packet.at(RREQ_PACKET_CETX_THREE) << 16) | (packet.at(RREQ_PACKET_CETX_TWO) << 8) | packet.at(RREQ_PACKET_CETX_ONE);
+    uint32_t m_cete = (packet.at(RREQ_PACKET_CETE_FOUR) << 24) | (packet.at(RREQ_PACKET_CETE_THREE) << 16) | (packet.at(RREQ_PACKET_CETE_TWO) << 8) | packet.at(RREQ_PACKET_CETE_ONE);
+    uint32_t re_energy = (packet.at(RREP_PACKET_RE_ENERGY_FOUR) << 24) | (packet.at(RREP_PACKET_RE_ENERGY_THREE) << 16) | (packet.at(RREP_PACKET_RE_ENERGY_TWO) << 8) | packet.at(RREP_PACKET_RE_ENERGY_ONE);
+   //Find link strength back to origin
+    auto entry = neighbour_etx.find(source);
+    if (entry->first == source)
+    {
+        m_cetx += entry->second;
+    } 
+    else {
+        std::cout<<"Time "<<clock()<<"(cycles) error at line 1150"<<endl;
+        m_cetx += PRECISION; 
+    }
+    //Find energy cost back to origin
+    auto entry_ete = neighbour_ete.find(source);
+    if (entry_ete->first == source)
+    {
+        m_cete += entry_ete->second;
+    } 
+    else 
+    {
+        std::cout<<"Time "<<clock()<<"(cycles) error at line 1161"<<endl;
+        m_cete += PRECISION; //GIve it more of a penalty
+    }
+   if (START_BATTERY<re_energy)
+   {
+       re_energy = START_BATTERY;
+   }
    // Increment RREQ hop count
    uint8_t hop = packet.at(RREQ_PACKET_HOP_COUNT) + 1;
    uint8_t hop_rrep = hop;
@@ -1118,10 +1191,10 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
      {
        
        RoutingTableEntry newEntry =RoutingTableEntry( /*dst=*/ origin,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ hop,route_list,  /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, /*Make source be destination*/ packet.at(RREQ_PACKET_DESTINATION_IP));
-       RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH));
+       RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy);
         newEntry.SetValidSeqNo(true);
         newEntry.addRoutingEntity(newEntity);
-        newEntry.update_advertise_hop();
+        newEntry.update_advertise_parameters();
         newEntry.update_LoRa_path();
        m_routing_table.AddRoute (newEntry,0);
      }
@@ -1138,16 +1211,16 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                    //This is not the origin
                    toOrigin.SetHop(255); //Set to infinity
                    toOrigin.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH)); //Insert this into the route list
+                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
                    toOrigin.addRoutingEntity(newEntity);
                }
                else {
                    toOrigin.SetHop(0); //add hop count is 0
                }
              }
-            else if ((int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) == 0) && (toOrigin.GetHop()>=packet.at(RREQ_PACKET_HOP_COUNT)) ) {
+            else if ((int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) == 0) && (toOrigin.GetHop()>=packet.at(RREQ_PACKET_HOP_COUNT)) && (m_cetx<=toOrigin.GetCetx()) && (toOrigin.GetCete()<=re_energy) ) {
             //Second case NB modified it so it is less strict than pure AOMDV
-                RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH)); //Insert this into the route list
+                RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
                 toOrigin.addRoutingEntity(newEntity);
             }
          }
@@ -1161,7 +1234,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                    //This is not the origin
                    toOrigin.SetHop(255); //Set to infinity
                    toOrigin.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH)); //Insert this into the route list
+                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
                    toOrigin.addRoutingEntity(newEntity);
                }
                else {
@@ -1180,7 +1253,28 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        logInfo ("Neighbor: not found in routing table. Creating an entry");
        
        RoutingTableEntry newEntry  = RoutingTableEntry( /*dst=*/ source,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ 1, route_list, /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, device_ip_address);
-       RouteEntity newEntity = RouteEntity(source,1,source);
+        uint32_t neigh_cetx;
+        uint32_t neigh_cete;
+        auto entry_neigh = neighbour_etx.find(source);
+        if (entry_neigh->first == source)
+        {
+            neigh_cetx = entry_neigh->second;
+        } 
+        else {
+            std::cout<<"Time "<<clock()<<"(cycles) error at line 1259"<<endl;
+            neigh_cetx = PRECISION; 
+        }
+        //Find energy cost back to origin
+        auto entry_ete_neigh = neighbour_ete.find(source);
+        if (entry_ete_neigh->first == source)
+        {
+            neigh_cete = entry_ete_neigh->second;
+        }       
+        else {
+            std::cout<<"Time "<<clock()<<"(cycles) error at line 1269"<<endl;
+            neigh_cete = PRECISION; 
+        }
+       RouteEntity newEntity = RouteEntity(source,1,source,neigh_cetx,neigh_cete,START_BATTERY);
        newEntry.addRoutingEntity(newEntity);
        newEntry.SetNextHop();
        m_routing_table.AddRoute (newEntry,0);
@@ -1254,7 +1348,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                m_routing_table.LookupRoute (origin, toOrigin);
                //Create this function
                logInfo("Sending route by intermediate node");
-               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH),source,packet.at(RREQ_PACKET_RRER_RREQ));
+               SendReplyByIntermediateNode (toDst, toOrigin, packet.at(RREQ_PACKET_G),packet.at(RREQ_PACKET_ORIGIN_NEIGH),source,packet.at(RREQ_PACKET_RRER_RREQ), packet);
                return;
              }
             
@@ -1274,10 +1368,11 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
     // ScheduleRreqRetry (dst);
   //JUST SENDING AN RREQ AGAIN I GUESS
     //When sending RREQ update the hop counts
-    toOrigin.update_advertise_hop(); 
+    toOrigin.update_advertise_parameters(); 
     packet.at(RREQ_PACKET_TTL) = packet.at(RREQ_PACKET_TTL) - 1; 
     //change RREQ source to this address
     packet.at(RREQ_SENDER) = device_ip_address;
+    update_packet_cetx_cete(packet,m_cetx,m_cete,re_energy,ROUTE_REQUEST);//Forward new information to future packets
     if ((firsthop_list.size()<=1) && (firsthop_list.begin()->second.size()<=1))
     {
         //THis is the first RREQ so only reply to this 
@@ -1295,6 +1390,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                 if (send_data(packet) == mDot::MDOT_OK)
                 {
                     m_rreqCount++;
+                    Update_neighbour_ete(packet.at(RREP_PACKET_RECIPIENT),1);
                     Update_neighbour_tx(packet.at(RREQ_RECIPIENT));
                 }
             }
@@ -1670,6 +1766,7 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
             ThisThread::sleep_for(TX_NEXT_WAIT);
             if (send_data(packet) == mDot::MDOT_OK)
             {
+                    Update_neighbour_ete(packet.at(RREP_PACKET_RECIPIENT),2);
                     Update_neighbour_tx(packet.at(RREP_PACKET_RECIPIENT));
             }
         }
@@ -1747,7 +1844,7 @@ void receive_rrer(std::vector<uint8_t> p, uint8_t src)
                     }
                     else 
                     {
-                        toDst.update_advertise_hop();
+                        toDst.update_advertise_parameters();
                         toDst.update_LoRa_path();
                     }
                 }
@@ -2001,7 +2098,7 @@ void message_queue_handler(void)
 //      Route-Reply Ack (RREP-ACK)      4
       
 
-int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer) {
+int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer, uint32_t cetx, uint32_t cete, uint32_t re_energy) {
 // FORMAT OF RREQ MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
 //    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -2048,10 +2145,26 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
             output.push_back(r_ack);
             output.push_back(neighbour_source);
             output.push_back(rreq_rrer);
+            //Unpacking cetx to be able to send over the LoRa channel
+            output.push_back(cetx & 0xff);
+            output.push_back((cetx >> 8) & 0xff);
+            output.push_back((cetx >> 16) & 0xff);
+            output.push_back((cetx >> 24) & 0xff);
+            //Unpacking cete to be able to send over the LoRa channel
+            output.push_back(cete & 0xff);
+            output.push_back((cete >> 8) & 0xff);
+            output.push_back((cete >> 16) & 0xff);
+            output.push_back((cete >> 24) & 0xff);
+            //Unpacking re_energy to be able to send over the LoRa channel
+            output.push_back(re_energy & 0xff);
+            output.push_back((re_energy >> 8) & 0xff);
+            output.push_back((re_energy >> 16) & 0xff);
+            output.push_back((re_energy >> 24) & 0xff);
             //wait for the radio to be done
             if(send_data(output) == mDot::MDOT_OK)
             {
                 Update_neighbour_tx(recipient_address);
+                Update_neighbour_ete(recipient_address,1);
                 return mDot::MDOT_OK;
             }
             else 
@@ -2064,7 +2177,7 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
         }
     }
 
-int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer) {
+int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer, uint32_t cetx, uint32_t cete, uint32_t re_energy) {
 // FORMAT OF RREP MORE INFO AT https://datatracker.ietf.org/doc/html/rfc3561#section-5.1
 //      0                   1                   2                   3
 //    0                   1                   2                   3
@@ -2101,11 +2214,27 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     output.push_back(neighbour_source);
     output.push_back(rreq_rrer);
     //wait for the radio to be done
+    //Unpacking cetx to be able to send over the LoRa channel
+    output.push_back(cetx & 0xff);
+    output.push_back((cetx >> 8) & 0xff);
+    output.push_back((cetx >> 16) & 0xff);
+    output.push_back((cetx >> 24) & 0xff);
+    //Unpacking cete to be able to send over the LoRa channel
+    output.push_back(cete & 0xff);
+    output.push_back((cete >> 8) & 0xff);
+    output.push_back((cete >> 16) & 0xff);
+    output.push_back((cete >> 24) & 0xff);
+    //Unpacking re_energy to be able to send over the LoRa channel
+    output.push_back(re_energy & 0xff);
+    output.push_back((re_energy >> 8) & 0xff);
+    output.push_back((re_energy >> 16) & 0xff);
+    output.push_back((re_energy >> 24) & 0xff);
     std::cout<<"Sending "<<output.size()<<" bytes "<<endl;
     wait_on_radio();
     if(send_data(output) == mDot::MDOT_OK)
         {
             Update_neighbour_tx(recipient_add);
+            Update_neighbour_ete(recipient_add,2);
             return mDot::MDOT_OK;
         }
         else 
@@ -2771,6 +2900,24 @@ void EpochTimerEvent()
     {
         neighbour_rx_prev.insert(std::make_pair(i->first, i->second));
     }
+    //Calculate ETX link for every entry in neighbour_tx
+    neighbour_etx.clear(); //refresh for current epoch
+    for (std::map<uint8_t,uint32_t>::const_iterator i = neighbour_tx.begin (); i != neighbour_tx.end (); ++i)
+    {
+        //First find the corresponding downlink quality
+        auto entry = neighbour_rx_ack.find(i->first);
+        //See if a reply has been found
+        if (entry->first == i->first)
+        {
+            neighbour_etx.insert(std::make_pair(i->first, static_cast<uint32_t> (1/((i->second/EPOCH)*(entry->second/EPOCH))*PRECISION) ));
+        }
+    }
+    START_BATTERY = FULL_BATTERY * PRECISION * 360;
+    for (std::map<uint8_t,uint32_t>::const_iterator i = neighbour_ete.begin (); i != neighbour_ete.end (); ++i)
+    {
+        //Here we update the residual
+        START_BATTERY -= i->second;//converts to consumption in hour and then converts to original double 
+    }
     //Reset amount trackers to track current epoch
     m_tx_count = 0;
     m_rx_count = 0;
@@ -2825,6 +2972,50 @@ void Update_neighbour_rx_ack(uint8_t neigh_address, uint32_t receive_count)
         else {
         //insert a new element
         neighbour_rx_ack.insert(std::make_pair(neigh_address, receive_count));
+        }
+
+    }
+}
+
+void Update_neighbour_ete(uint8_t neigh_address, uint8_t type)
+{
+    double energy;
+    if (type==ROUTE_REPLY)
+    {
+        // DR_6 : SF7 @ 250kHz
+        // std::uint8_t SF
+        // int BW
+        // std::uint8_t B
+        // std::uint8_t CR
+        // std::uint8_t H
+         energy = Calculate_TOA(7,250000,RREP_LENGTH,1,0) * VOLTAGE * CURRENT;
+    }
+    else if (type == ROUTE_REQUEST)
+    {
+         energy = Calculate_TOA(7,250000,RREQ_LENGTH,1,0) * VOLTAGE * CURRENT;
+    }
+    else {
+    std::cout<<"Time "<<clock()<<"(cycles) error in Update_neighbour_ete"<<endl;
+    return;
+    }
+
+        if (neighbour_ete.empty())
+        {
+            //empty add a new entry
+            neighbour_ete.insert(std::make_pair(neigh_address,static_cast<uint32_t> (energy*PRECISION)));
+        }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_ete.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second +=static_cast<uint32_t> (energy*PRECISION);
+        }
+        else {
+        //insert a new element
+        neighbour_ete.insert(std::make_pair(neigh_address, static_cast<uint32_t> (energy*PRECISION)));
         }
 
     }

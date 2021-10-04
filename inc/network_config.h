@@ -193,7 +193,45 @@ typedef enum {
 #define K_REPEATS 3
 #endif
 
+//////////////////////////////////////////////////
+/////ADDITIONAL LREEAOMDVLDLR CONFIGURATIONS ////
+////////////////////////////////////////////////
+
 #if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
+
+#define RREQ_PACKET_CETX_ONE 15
+#define RREQ_PACKET_CETX_TWO 16
+#define RREQ_PACKET_CETX_THREE 17
+#define RREQ_PACKET_CETX_FOUR 18
+
+#define RREQ_PACKET_CETE_ONE 19
+#define RREQ_PACKET_CETE_TWO 20
+#define RREQ_PACKET_CETE_THREE 21
+#define RREQ_PACKET_CETE_FOUR 22
+
+#define RREQ_PACKET_RE_ENERGY_ONE 23
+#define RREQ_PACKET_RE_ENERGY_TWO 24
+#define RREQ_PACKET_RE_ENERGY_THREE 25
+#define RREQ_PACKET_RE_ENERGY_FOUR 26
+
+#define RREQ_LENGTH 27
+
+#define RREP_PACKET_CETX_ONE 13
+#define RREP_PACKET_CETX_TWO 14
+#define RREP_PACKET_CETX_THREE 15
+#define RREP_PACKET_CETX_FOUR 16
+
+#define RREP_PACKET_CETE_ONE 17
+#define RREP_PACKET_CETE_TWO 18
+#define RREP_PACKET_CETE_THREE 19
+#define RREP_PACKET_CETE_FOUR 20
+
+#define RREP_PACKET_RE_ENERGY_ONE 21
+#define RREP_PACKET_RE_ENERGY_TWO 22
+#define RREP_PACKET_RE_ENERGY_THREE 23
+#define RREP_PACKET_RE_ENERGY_FOUR 24
+
+#define RREP_LENGTH 25
 
 #define R_ACK_PACKET_TYPE 0
 #define R_ACK_PACKET_RECIPIENT 1
@@ -204,6 +242,14 @@ typedef enum {
 #define R_ACK_PACKET_LINK_THREE 6
 #define R_ACK_PACKET_LINK_FOUR 7
 
+#define EPOCH_CHRONO 10s //chrono time of epoch
+#define EPOCH 10//time in seconds for calculations
+
+//Phyical parameters
+#define CURRENT 30 //mA
+#define VOLTAGE 3.3 //V
+#define PRECISION 1000 //defines precision in doubles when sent over channel
+#define FULL_BATTERY 650 //mAh
 #endif
 
 #endif

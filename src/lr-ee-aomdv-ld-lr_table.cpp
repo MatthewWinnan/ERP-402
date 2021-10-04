@@ -2,11 +2,14 @@
 #include <iostream>
 
 #if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
-  RouteEntity::RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s) {
+  RouteEntity::RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre) {
 
      next_hop = next;
      hopcount = hop;
      neighbour_source = n_s;
+     m_cetx = cetx;
+     m_cete = cete;
+     m_mre = mre;
 
 }
 
@@ -25,6 +28,21 @@ uint8_t RouteEntity::get_hopcount() {
 uint8_t RouteEntity::get_neighbour_source() const
 {
     return neighbour_source;
+}
+
+uint32_t RouteEntity::get_cetx() const
+{
+    return m_cetx;
+}
+
+uint32_t RouteEntity::get_cete() const
+{
+    return m_cete;
+}
+
+uint32_t RouteEntity::get_mre() const
+{
+    return m_mre;
 }
 
 void RouteEntity::set_next_hop(uint8_t next) {
@@ -46,6 +64,21 @@ RouteFlags RouteEntity::get_status() const {
 
 void RouteEntity::set_status(RouteFlags sts) {
 status = sts;
+}
+
+void RouteEntity::set_cetx(uint32_t cetx)
+{
+    m_cetx = cetx;
+}
+
+void RouteEntity::set_cete(uint32_t cete)
+{
+    m_cete = cete;
+}
+
+void RouteEntity::set_mre(uint32_t mre)
+{
+    m_mre = mre;
 }
 
 bool RouteEntity::InsertPrecursor(uint8_t id) {

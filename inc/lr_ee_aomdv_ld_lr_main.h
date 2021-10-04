@@ -1,4 +1,6 @@
 #include "network_config.h"
+#include <cmath>
+#include <ctime>
 #include <utility>
 
 #if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
@@ -70,7 +72,7 @@ uint32_t m_tx_count; //keeps track of messages sent per epoch count
 uint32_t m_rx_count; //keeps track of messages received per epoch count
 uint32_t m_tx_count_prev; //keeps track of messages sent per epoch count -1
 uint32_t m_rx_count_prev; //keeps track of messages received per epoch count -1
-
+uint32_t START_BATTERY ; //mAh
 //This stores the amount of messages sent i->j for epoch
 //KEY               VALUE
 //Neighbour Add     Tx amount
@@ -97,9 +99,22 @@ std::map<uint8_t,uint32_t> neighbour_rx_prev;
 //Neighbour Add     Rx amount
 std::map<uint8_t,uint32_t> neighbour_rx_ack;
 
+//This stores the link etx between neighbouring nodes for the time epoch
+//KEY               VALUE
+//Neighbour Add     ETX value
+std::map<uint8_t, uint32_t> neighbour_etx;
+
+//This stores the consumed energy for a link during RREP and RREQ
+//KEY               VALUE
+//Neighbour Add     ETE value
+std::map<uint8_t, uint32_t> neighbour_ete;
+
 void Update_neighbour_tx(uint8_t neigh_address);
 
 void Update_neighbour_rx_ack(uint8_t neigh_address, uint32_t receive_count);
+
+void Update_neighbour_ete(uint8_t neigh_address, uint8_t type);
+
 
 EventQueue main_queue(32 * EVENTS_EVENT_SIZE); //this will call an event in IRQ so the process can be handled safely.
 Thread main_thread; //Thread that handles the queue
@@ -145,7 +160,7 @@ void SendReply(std::vector<uint8_t> packet , RoutingTableEntry & toOrigin, uint8
 //toOrigin    routing table entry to originator
 //gratRep indicates whether a gratuitous RREP should be unicast to destination
 //for AOMDV neighbour_source is the RREQ packet the reply is for
-void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ);
+void SendReplyByIntermediateNode (RoutingTableEntry & toDst, RoutingTableEntry & toOrigin, bool gratRep, uint8_t neighbour_source, uint8_t src, uint8_t RRER_RREQ, std::vector<uint8_t> packet);
 
 //Send RREP_ACK.
 //Parameters
@@ -287,9 +302,9 @@ void ScheduleRrerRreqRetry(uint8_t dst, uint8_t dstSeqNo, uint8_t origin);
 
 ///////////////////////////////////////////////////////////////////////////////
 /////////////PACKET SENDING FUNCTIONS/////////////////////////////////////////
-int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer);
+int send_rreq(uint8_t recipient_address, uint8_t sender_address ,uint8_t source_add, uint8_t destination_add, uint8_t hop_count, uint8_t rreq_id, uint8_t dest_seq_num, uint8_t origin_seq_num, uint8_t seq_valid, uint8_t g, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer, uint32_t cetx, uint32_t cete, uint32_t re_energy);
 
-int send_rrep(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer);
+int send_rrep(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack, uint8_t neighbour_source, uint8_t rreq_rrer, uint32_t cetx, uint32_t cete, uint32_t re_energy);
 
 int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t DestCount, uint8_t ttl, std::vector<uint8_t> u_dest, std::vector<uint8_t> u_dest_seq);
 
@@ -433,6 +448,61 @@ void Rx_interrupt() {
     }
     rx_bit = 1;
     return;
+}
+
+
+double Calculate_TOA(uint8_t SF, int BW, uint8_t B, uint8_t CR, uint8_t H)
+{
+    double t_symbol = (pow((double)2, (double)SF))/(BW);
+    double t_payload = (8+ ceil((8*B-4*SF+28+16-20*H)/(4*SF)) * (CR*4)) * t_symbol;
+    return t_payload;
+}
+
+void update_packet_cetx_cete(std::vector<uint8_t> packet, uint32_t cetx, uint32_t cete, uint32_t mre, uint8_t type)
+{
+    if (type == ROUTE_REQUEST)
+    {
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREQ_PACKET_CETX_ONE) = cetx & 0xff;
+    packet.at(RREQ_PACKET_CETX_TWO) = (cetx >> 8) & 0xff;
+    packet.at(RREQ_PACKET_CETX_THREE) = (cetx >> 16) & 0xff;
+    packet.at(RREQ_PACKET_CETX_FOUR) = (cetx >> 24) & 0xff;
+    //Unpacking cete to be able to send over the LoRa channel
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREQ_PACKET_CETE_ONE) = cete & 0xff;
+    packet.at(RREQ_PACKET_CETE_TWO) = (cete >> 8) & 0xff;
+    packet.at(RREQ_PACKET_CETE_THREE) = (cete >> 16) & 0xff;
+    packet.at(RREQ_PACKET_CETE_FOUR) = (cete >> 24) & 0xff;
+    //Unpacking re_energy to be able to send over the LoRa channel
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREQ_PACKET_RE_ENERGY_ONE) = mre & 0xff;
+    packet.at(RREQ_PACKET_RE_ENERGY_TWO) = (mre >> 8) & 0xff;
+    packet.at(RREQ_PACKET_RE_ENERGY_THREE) = (mre >> 16) & 0xff;
+    packet.at(RREQ_PACKET_RE_ENERGY_FOUR) = (mre >> 24) & 0xff;
+    }
+    else if (type == ROUTE_REPLY) 
+    {
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREP_PACKET_CETX_ONE) = cetx & 0xff;
+    packet.at(RREP_PACKET_CETX_TWO) = (cetx >> 8) & 0xff;
+    packet.at(RREP_PACKET_CETX_THREE) = (cetx >> 16) & 0xff;
+    packet.at(RREP_PACKET_CETX_FOUR) = (cetx >> 24) & 0xff;
+    //Unpacking cete to be able to send over the LoRa channel
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREP_PACKET_CETE_ONE) = cete & 0xff;
+    packet.at(RREP_PACKET_CETE_TWO) = (cete >> 8) & 0xff;
+    packet.at(RREP_PACKET_CETE_THREE) = (cete >> 16) & 0xff;
+    packet.at(RREP_PACKET_CETE_FOUR) = (cete >> 24) & 0xff;
+    //Unpacking re_energy to be able to send over the LoRa channel
+    //Unpacking cetx to be able to send over the LoRa channel
+    packet.at(RREP_PACKET_RE_ENERGY_ONE) = mre & 0xff;
+    packet.at(RREP_PACKET_RE_ENERGY_TWO) = (mre >> 8) & 0xff;
+    packet.at(RREP_PACKET_RE_ENERGY_THREE) = (mre >> 16) & 0xff;
+    packet.at(RREP_PACKET_RE_ENERGY_FOUR) = (mre >> 24) & 0xff;    
+    }
+    else {
+    std::cout<<"Time "<<clock()<<"(cycles) error at update_packet_cetx_cete"<<endl;
+    }
 }
 #endif
 
