@@ -109,9 +109,16 @@ std::map<uint8_t, uint32_t> neighbour_etx;
 //Neighbour Add     ETE value
 std::map<uint8_t, uint32_t> neighbour_ete;
 
+//This stores the current load of the indicated neighbour
+//KEY               VALUE
+//Neighbour Add     Load of the neighbour
+std::map<uint8_t, uint32_t> neighbour_load;
+
 void Update_neighbour_tx(uint8_t neigh_address);
 
 void Update_neighbour_rx_ack(uint8_t neigh_address, uint32_t receive_count);
+
+void Update_neighbour_load(uint8_t neigh_address, uint32_t load);
 
 void Update_neighbour_ete(uint8_t neigh_address, uint8_t type);
 
@@ -310,7 +317,7 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
 
 int send_hallo(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add, uint8_t destination_add, uint8_t prefix_size, uint8_t hop_count, uint8_t lifetime, uint8_t dest_seq_num, uint8_t m_ttl, uint8_t r_ack);
 
-int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl, uint32_t link_count);
+int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl, uint32_t link_count, uint32_t load);
 
 int send_message_data(uint8_t recipient_address, uint8_t sender_address, uint8_t origin, uint8_t dest, uint8_t ttl, std::vector<uint8_t> packet);
 

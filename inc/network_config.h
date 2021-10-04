@@ -241,6 +241,10 @@ typedef enum {
 #define R_ACK_PACKET_LINK_TWO 5
 #define R_ACK_PACKET_LINK_THREE 6
 #define R_ACK_PACKET_LINK_FOUR 7
+#define R_ACK_PACKET_LOAD_ONE 8
+#define R_ACK_PACKET_LOAD_TWO 9
+#define R_ACK_PACKET_LOAD_THREE 10
+#define R_ACK_PACKET_LOAD_FOUR 11
 
 #define EPOCH_CHRONO 10s //chrono time of epoch
 #define EPOCH 10//time in seconds for calculations
