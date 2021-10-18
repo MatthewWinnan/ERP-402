@@ -12,7 +12,7 @@
 
 //Select the active user
 #if !defined(ACTIVE_USER)
-#define ACTIVE_USER  DESTINATION_NODE
+#define ACTIVE_USER  ROUTING_NODE
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -26,7 +26,7 @@
 
 //Select the current protocol version
 #if !defined(ACTIVE_VERSION)
-#define ACTIVE_VERSION  LR_EE_AOMDV_LD_LR
+#define ACTIVE_VERSION  AODV
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS

@@ -174,6 +174,8 @@ void start()
         main_queue.event(request_queue_handler);
         main_queue.event(message_queue_handler);
     #elif ACTIVE_USER == ROUTING_NODE
+        //Assigning random unique address
+        device_ip_address = RNG.getByte() % 7;
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
         routing_t.attach(&queue_request_queue_handler,1s);
@@ -1330,7 +1332,7 @@ void request_queue_handler(void)
                         ProcessHello(packet);
                             }
                         #elif ACTIVE_USER == CLIENT_NODE
-                            if (packet.at(RREQ_SENDER)!=100)
+                            if (packet.at(RREP_PACKET_SENDER)!=100)
                             {
                                 //not the client so this is fine
                         logInfo("Got a hello message");
@@ -1436,7 +1438,7 @@ void message_queue_handler(void)
             send_rreq(destination_ip_address);
         }
         else {
-            //check the route status
+            //check the route status-+
             if (toDst.GetFlag()==VALID)
             {
                 //routte exhists so forward

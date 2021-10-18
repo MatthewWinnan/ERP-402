@@ -15,7 +15,7 @@
 #include "aodv_id_cache.h"
 #include "lora_route.h"
 #include "aodv_table.h"
-
+#include "rng.h"
 ///BIG REMEMBER ALWAYS SEND TIME IN SECONDS AND CONVERT TO TIME WHEN RECEIVED
 ////FINE TO KEEP BIG WHEN IN MEMORY FOR NOW
 
@@ -54,7 +54,8 @@ void message_queue_handler(void);
     // std::map<uint8_t, std::vector<uint8_t>> source_neighbour_receive_list;
     #endif
 #elif ACTIVE_USER == ROUTING_NODE
-    uint8_t device_ip_address = 50;
+    Random RNG = Random();
+    uint8_t device_ip_address = 0;
     uint8_t destination_ip_address = 100;
 #elif ACTIVE_USER == CLIENT_NODE
     uint8_t device_ip_address = 20;
