@@ -1,6 +1,7 @@
 #ifndef AOMDV_LD_LR_TABLE_H
 #define AOMDV_LD_LR_TABLE_H
 
+#include <cstdint>
 #include <stdint.h>
 #include <cassert>
 #include <map>
@@ -28,7 +29,7 @@ enum RouteFlags
 class RouteEntity
 {
 public:
-    RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre);
+    RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre, uint32_t load);
     ~RouteEntity();
 
     uint8_t get_next_hop() const;
@@ -37,6 +38,7 @@ public:
     uint32_t get_cetx() const;
     uint32_t get_cete() const;
     uint32_t get_mre() const;
+    uint32_t get_load() const;
     RouteFlags get_status() const;
 
     void set_next_hop(uint8_t next);
@@ -45,6 +47,7 @@ public:
     void set_cetx(uint32_t cetx);
     void set_cete(uint32_t cete);
     void set_mre(uint32_t mre);
+    void set_load(uint32_t load);
     void set_status (RouteFlags sts);
 
         //\{
@@ -64,6 +67,7 @@ private:
     uint32_t m_cetx;
     uint32_t m_cete;
     uint32_t m_mre;
+    uint32_t m_load;
     RouteFlags status;
     std::vector<uint8_t> m_precursorList;
 
@@ -158,16 +162,32 @@ public:
     void update_LoRa_path() //Used to update what path sould be chosen. For now forward to path with the smallest hop
     {
         //Assuming made here it is new hop look at smallest hop best
-        m_LoRa_route.SetNextHop(m_route_list.front().get_next_hop());
+        uint32_t max_load = 2808348671;
+        uint8_t max_hop = 255;
+        uint32_t max_advertised_cetx = 2808348671;
+        uint32_t max_advertised_cete = 2808348671;
+
         for (int i = 1; i<m_route_list.size(); i++)
-         {
-          if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
-          {
-            //This is smaller so make this next hop
-            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
-            m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+        {
+            if (m_route_list.at(i).get_hopcount()<max_hop)
+            {
+                if (m_route_list.at(i).get_load()<max_load)
+                {
+                    //Very important that the load needs to be low as long as this is met then fine
+                    //Consider why this works
+                    //i) if hop count smaller and load smaller then both decrease and set to new path
+                    //ii) if new lower hop count found with lower load then updates
+                    //iii) if new lower hop count found but has higher load than i) ii) then leave it, since neither updates there is still a chance for
+                    //ii) to happen again as such should be fine
+                    //TODO incorporate CETE and CETX into decision or route disc good enough
+                    //iv) it might lead to lower throughput still
+                    max_load =   m_route_list.at(i).get_load();
+                    max_hop = m_route_list.at(i).get_hopcount();
+                    m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+                    std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 140 with count "<<max_hop<<" and load "<<max_load<<endl;
+                }
             }
-        }         
+        }        
     }
 
 ///////////////////////////////////////////////
@@ -436,6 +456,7 @@ public:
     bool SetEntryState (uint8_t dst, RouteFlags state);
     void GetListOfDestinationWithNextHop (uint8_t nextHop, std::map<uint8_t, uint32_t> & unreachable);
     void GetListOfDestinationWithNextHopAOMDV (uint8_t nextHop, std::map<uint8_t, uint32_t> & unreachable);
+    void SetLoadTableEntriesWithNextHop (uint8_t nextHop,  uint32_t load);
     void InvalidateRoutesWithDst (std::map<uint8_t, uint32_t> const & unreachable);
     //void InvalidateRoutesWithDst (uint8_t dest);
 //   void DeleteAllRoutesFromInterface (Ipv4InterfaceAddress iface);

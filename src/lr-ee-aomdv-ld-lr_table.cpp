@@ -2,7 +2,7 @@
 #include <iostream>
 
 #if ACTIVE_VERSION == LR_EE_AOMDV_LD_LR
-  RouteEntity::RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre) {
+  RouteEntity::RouteEntity(uint8_t next, uint8_t hop, uint8_t n_s, uint32_t cetx, uint32_t cete, uint32_t mre, uint32_t load) {
 
      next_hop = next;
      hopcount = hop;
@@ -10,6 +10,7 @@
      m_cetx = cetx;
      m_cete = cete;
      m_mre = mre;
+     m_load = load;
 
 }
 
@@ -43,6 +44,11 @@ uint32_t RouteEntity::get_cete() const
 uint32_t RouteEntity::get_mre() const
 {
     return m_mre;
+}
+
+uint32_t RouteEntity::get_load() const
+{
+    return m_load;
 }
 
 void RouteEntity::set_next_hop(uint8_t next) {
@@ -79,6 +85,11 @@ void RouteEntity::set_cete(uint32_t cete)
 void RouteEntity::set_mre(uint32_t mre)
 {
     m_mre = mre;
+}
+
+void RouteEntity::set_load(uint32_t load)
+{
+    m_load = load;
 }
 
 bool RouteEntity::InsertPrecursor(uint8_t id) {
@@ -345,6 +356,20 @@ void RoutingTable::GetListOfDestinationWithNextHopAOMDV(uint8_t nextHop, std::ma
             }
         }
     }
+}
+
+void RoutingTable::SetLoadTableEntriesWithNextHop (uint8_t nextHop,  uint32_t load)
+{
+    Purge ();
+    for (std::map<uint8_t, RoutingTableEntry>::const_iterator i =
+            m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
+    {
+        for (int j = 0; j<i->second.getRouteList().size();j++)
+        if (i->second.getRouteList().at(j).get_next_hop() == nextHop)
+        {
+            i->second.getRouteList().at(j).set_load(load);
+        }
+    } 
 }
 
 void RoutingTable::Purge() {

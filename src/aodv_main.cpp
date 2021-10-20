@@ -124,7 +124,7 @@ int main() {
             tx_data.insert(tx_data.begin(),destination_ip_address);
             tx_data.insert(tx_data.begin(),device_ip_address);
             tx_data.insert(tx_data.begin(),device_ip_address);
-            tx_data.insert(tx_data.begin(),0);
+            tx_data.insert(tx_data.begin(),255); //make recipient for gate wild card
             tx_data.insert(tx_data.begin(),type);
 
             QueueEntry newEntry (tx_data,QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000);
@@ -747,7 +747,13 @@ void ProcessHello(std::vector<uint8_t> packet)
             //the key does exhist update the value
             element->second = clock();
             }
+        else 
+        {
+            //the key does not exhists so add it to the timer watch list
+            m_hallo_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
         }
+
+    }
         
     std::vector<RouteEntity> route_list;
    RoutingTableEntry toNeighbor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
@@ -1408,16 +1414,15 @@ void message_queue_handler(void)
         {
             if (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address)
             {
-                //Not from the client
-            //Dequed fine
-            if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
-            {
-               std::cout<<"Routed forward line 1419"<<endl; //successfully routed
-            }
-            else
-            {
-                std::cout<<"Couldn't route forward line 1423"<<endl;
-            }                
+                    //Dequed fine
+                    if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
+                    {
+                    std::cout<<"Routed forward line 1419"<<endl; //successfully routed
+                    }
+                    else
+                    {
+                        std::cout<<"Couldn't route forward line 1423"<<endl;
+                    }    
             }
             else {
             std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
@@ -1444,9 +1449,18 @@ void message_queue_handler(void)
                 //routte exhists so forward
                 if(message_request_queue.Dequeue(destination_ip_address, handleRequest))
                 {
+                    if ((handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)==255) || (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address))
+                    {
                     //Successfully dequed packet
                     logInfo("Calling function forward_message line 1453");
                     forward_message(handleRequest.GetPacket(),destination_ip_address,device_ip_address);
+                    }
+                    else
+                    {
+                std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
+                <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
+                    }
+
                 }
                 else {
                     std::cout<<"Odd it just disappeared"<<endl;

@@ -26,7 +26,7 @@
 
 //Select the current protocol version
 #if !defined(ACTIVE_VERSION)
-#define ACTIVE_VERSION  AODV
+#define ACTIVE_VERSION  LR_EE_AOMDV_LD_LR
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS
@@ -34,6 +34,7 @@
 
 #define ACTIVE_ROUTE_TIMEOUT              30000  // Used during upper bound delete calculations
 #define ALLOWED_HELLO_LOSS                2  // Number of hallo packet drops allowed
+#define ALLOWED_R_ACK_LOSS          2 //Number of times sending retrying to receive an r_ack
 #define HELLO_INTERVAL           20000  // If defined for node, this indicates how often hallo packets are sent to check links
 #define TTL_START     1  // 
 #define TTL_THRESHOLD          2  //

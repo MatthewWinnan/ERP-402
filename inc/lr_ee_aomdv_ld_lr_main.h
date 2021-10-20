@@ -18,7 +18,7 @@
 #include "aodv_queue.h"
 #include "aodv_id_cache.h"
 #include "lora_route.h"
-
+#include "rng.h"
 //Redeclaring which table I will be using
 #include "lr_ee_aomdv_ld_lr_table.h"
 
@@ -48,7 +48,8 @@ void message_queue_handler(void);
     uint8_t device_ip_address = 100;
     uint8_t destination_ip_address = 100;
 #elif ACTIVE_USER == ROUTING_NODE
-    uint8_t device_ip_address = 50;
+    Random RNG = Random();
+    uint8_t device_ip_address = 0;
     uint8_t destination_ip_address = 100;
 #elif ACTIVE_USER == CLIENT_NODE
     uint8_t device_ip_address = 20;
@@ -358,6 +359,8 @@ Ticker rreq_t;
 Ticker rrer_rreq_t;
 //Main Epoch ticker
 Ticker time_epoch;
+//R_ack ticker
+Ticker r_ack_t;
 
 ///Flags to keep track of errors
 bool hallo_flag;
@@ -370,6 +373,13 @@ std::map<uint8_t, clock_t> m_hallo_tracker;
 //KEY   VALUE
 //dst   retries
 std::map<uint8_t, uint8_t> m_hallo_retry;
+//Handles the time between expected r_ack of neighbours to keep track of link breaks
+//Uplink the node might get hallo but down link r_ack might be unstable. Also r_ack needed so check valid link
+std::map<uint8_t, clock_t> m_r_ack_tracker;
+//Tracks the amount of retries for the address
+//KEY   VALUE
+//dst   retries
+std::map<uint8_t, uint8_t> m_r_ack_retry;
 
 bool rreq_rate_flag;
 Ticker rreq_rate_timer;

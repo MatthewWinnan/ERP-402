@@ -173,6 +173,8 @@ void start()
         main_queue.event(message_queue_handler);
         main_queue.event(EpochTimerEvent);
     #elif ACTIVE_USER == ROUTING_NODE
+        //Assigning random unique address
+        device_ip_address = RNG.getByte() % 7;
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         rrer_rreq_t.attach(&QueueRerrRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
@@ -667,7 +669,15 @@ void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
             RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address); //modify table entries routes
             if (m_routing_table.LookupRoute (i->first, toDst))
             {
-                RouteEntity remover = RouteEntity(nextHop,0,0,0,0,0);
+                //Obtain load of neighbour if known
+                auto neigh_entry = neighbour_load.find(nextHop);
+                uint32_t nextload = 0;
+                if (neigh_entry!=neighbour_load.end())
+                {
+                    //found
+                    nextload = neigh_entry->second;
+                }
+                RouteEntity remover = RouteEntity(nextHop,0,0,0,0,0,nextload);
                 if(toDst.removeSpecificEntity(remover))
                 {
                     //was removed
@@ -926,8 +936,36 @@ void ProcessHello(std::vector<uint8_t> packet)
             //the key does exhist update the value
             element->second = clock();
             }
+        else 
+        {
+            //the key does not exhists so add it to the timer watch list
+            m_hallo_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
         }
-        
+
+    }
+    //Second add the r_ack timer
+    if(m_r_ack_tracker.empty())
+    {
+        //simply add the new entry
+        m_r_ack_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
+        }
+    else
+    {
+        //check if it is in the map
+        auto element = m_r_ack_tracker.find(packet.at(RREP_PACKET_DESTINATION_IP));
+        if (element->first == packet.at(RREP_PACKET_DESTINATION_IP))
+        {
+            //the key does exhist update the value
+            //R_ack checks only update when r_ack received
+            }
+        else 
+        {
+            //the key does not exhists so add it to the timer watch list
+            m_r_ack_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
+        }
+
+    }
+
     std::vector<RouteEntity> route_list;
    RoutingTableEntry toNeighbor = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
    if (!m_routing_table.LookupRoute (packet.at(RREP_PACKET_DESTINATION_IP), toNeighbor))
@@ -938,7 +976,15 @@ void ProcessHello(std::vector<uint8_t> packet)
        newEntry.SetValidSeqNo(true);
        //adding the hop to the multipath
        //First discovery make everything 0 as I don't know.
-        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_DESTINATION_IP),1,packet.at(packet.at(RREP_PACKET_DESTINATION_IP)),0,0,START_BATTERY);
+        //Obtain load of neighbour if known
+        auto neigh_entry = neighbour_load.find(packet.at(RREP_PACKET_DESTINATION_IP));
+        uint32_t nextload = 0;
+        if (neigh_entry!=neighbour_load.end())
+        {
+            //found
+            nextload = neigh_entry->second;
+        }
+        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_DESTINATION_IP),1,packet.at(packet.at(RREP_PACKET_DESTINATION_IP)),0,0,START_BATTERY,nextload);
         newEntry.SetValidSeqNo(true);
         newEntry.addRoutingEntity(newEntity);
         newEntry.update_advertise_parameters();
@@ -978,7 +1024,14 @@ void ProcessHello(std::vector<uint8_t> packet)
             std::cout<<"Time "<<clock()<<"(cycles) error at line 1269"<<endl;
             neigh_cete = PRECISION; 
         }
-        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_DESTINATION_IP),1,packet.at(packet.at(RREP_PACKET_DESTINATION_IP)),neigh_cetx,neigh_cete,START_BATTERY);
+        auto neigh_entry = neighbour_load.find(packet.at(RREP_PACKET_DESTINATION_IP));
+        uint32_t nextload = 0;
+        if (neigh_entry!=neighbour_load.end())
+        {
+            //found
+            nextload = neigh_entry->second;
+        }
+        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_DESTINATION_IP),1,packet.at(packet.at(RREP_PACKET_DESTINATION_IP)),neigh_cetx,neigh_cete,START_BATTERY,nextload);
         toNeighbor.clear_route_list();
         toNeighbor.addRoutingEntity(newEntity);
        toNeighbor.SetSeqNo (packet.at(RREP_PACKET_DESTINATION_SEQ));
@@ -1217,9 +1270,15 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
    
    if (!m_routing_table.LookupRoute (origin, toOrigin))
      {
-       
+        auto neigh_entry = neighbour_load.find(source);
+        uint32_t nextload = 0;
+        if (neigh_entry!=neighbour_load.end())
+        {
+            //found
+            nextload = neigh_entry->second;
+        }
        RoutingTableEntry newEntry =RoutingTableEntry( /*dst=*/ origin,/*seqNo=*/ packet.at(RREQ_PACKET_ORIGIN_SEQ),/*hops=*/ hop,route_list,  /*timeLife=*/MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000, /*Make source be destination*/ packet.at(RREQ_PACKET_DESTINATION_IP));
-       RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy);
+       RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy,nextload);
         newEntry.SetValidSeqNo(true);
         newEntry.addRoutingEntity(newEntity);
         newEntry.update_advertise_parameters();
@@ -1239,7 +1298,14 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                    //This is not the origin
                    toOrigin.SetHop(255); //Set to infinity
                    toOrigin.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(source);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy,nextload); //Insert this into the route list
                    toOrigin.addRoutingEntity(newEntity);
                }
                else {
@@ -1248,7 +1314,14 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
              }
             else if ((int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toOrigin.GetSeqNo ()) == 0) && (toOrigin.GetHop()>=packet.at(RREQ_PACKET_HOP_COUNT)) && (m_cetx<=toOrigin.GetCetx()) && (toOrigin.GetCete()<=re_energy) ) {
             //Second case NB modified it so it is less strict than pure AOMDV
-                RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(source);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy,nextload); //Insert this into the route list
                 toOrigin.addRoutingEntity(newEntity);
             }
          }
@@ -1262,7 +1335,14 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
                    //This is not the origin
                    toOrigin.SetHop(255); //Set to infinity
                    toOrigin.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(source);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(source,hop,packet.at(RREQ_PACKET_ORIGIN_NEIGH),m_cetx,m_cete,re_energy,nextload); //Insert this into the route list
                    toOrigin.addRoutingEntity(newEntity);
                }
                else {
@@ -1302,7 +1382,14 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             std::cout<<"Time "<<clock()<<"(cycles) error at line 1269"<<endl;
             neigh_cete = PRECISION; 
         }
-       RouteEntity newEntity = RouteEntity(source,1,source,neigh_cetx,neigh_cete,START_BATTERY);
+        auto neigh_entry = neighbour_load.find(source);
+        uint32_t nextload = 0;
+        if (neigh_entry!=neighbour_load.end())
+        {
+            //found
+            nextload = neigh_entry->second;
+        }
+       RouteEntity newEntity = RouteEntity(source,1,source,neigh_cetx,neigh_cete,START_BATTERY,nextload);
        newEntry.addRoutingEntity(newEntity);
        newEntry.SetNextHop();
        m_routing_table.AddRoute (newEntry,0);
@@ -1562,7 +1649,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
                    //This is not the origin
                    toDst.SetHop(255); //Set to infinity
                    toDst.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(src);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy,nextload); //Insert this into the route list
                    toDst.addRoutingEntity(newEntity);
                     toDst.SetNextHop();
                     toDst.SetValidSeqNo(true);
@@ -1586,7 +1680,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
                    //This is not the origin
                    toDst.SetHop(255); //Set to infinity
                    toDst.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(src);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy,nextload);  //Insert this into the route list
                    toDst.addRoutingEntity(newEntity);
                     toDst.SetNextHop();
                     toDst.SetValidSeqNo(true);
@@ -1612,7 +1713,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
                    //This is not the origin
                    toDst.SetHop(255); //Set to infinity
                    toDst.clear_route_list(); //Route list = NULL
-                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(src);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy,nextload);  //Insert this into the route list
                    toDst.addRoutingEntity(newEntity);
                     toDst.SetNextHop();
                     toDst.SetValidSeqNo(true);
@@ -1630,7 +1738,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
            //Here I need to track if the source is unique
            else if ((int8_t (packet.at(RREQ_PACKET_ORIGIN_SEQ)) - int8_t (toDst.GetSeqNo ()) == 0) && (toDst.GetHop()>=packet.at(RREQ_PACKET_HOP_COUNT)) && (m_cetx<=toDst.GetCetx()) && (toDst.GetCete()<=re_energy) )
              {
-                    RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy); //Insert this into the route list
+                   auto neigh_entry = neighbour_load.find(src);
+                    uint32_t nextload = 0;
+                    if (neigh_entry!=neighbour_load.end())
+                    {
+                        //found
+                        nextload = neigh_entry->second;
+                    }
+                   RouteEntity newEntity = RouteEntity(src,hop,src,m_cetx,m_cete,re_energy,nextload);  //Insert this into the route list
                     toDst.addRoutingEntity(newEntity);
                     toDst.SetNextHop();
                     toDst.SetValidSeqNo(true);
@@ -1647,7 +1762,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
         RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),/*make source be source of route*/ packet.at(RREP_PACKET_ORIGIN_IP));
         newEntry.SetNextHop();
         newEntry.SetValidSeqNo(true);
-        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy); //Insert this into the route list
+        auto neigh_entry = neighbour_load.find(packet.at(RREP_PACKET_SENDER));
+        uint32_t nextload = 0;
+        if (neigh_entry!=neighbour_load.end())
+        {
+            //found
+            nextload = neigh_entry->second;
+        }
+        RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy,nextload); //Insert this into the route list
         newEntry.addRoutingEntity(newEntity);
        m_routing_table.AddRoute (newEntry,0);
      }
@@ -1667,7 +1789,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
             RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),device_ip_address);
             newEntry.SetNextHop();
             newEntry.SetValidSeqNo(true);
-            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy); 
+            auto neigh_entry = neighbour_load.find(packet.at(RREP_PACKET_SENDER));
+            uint32_t nextload = 0;
+            if (neigh_entry!=neighbour_load.end())
+            {
+                //found
+                nextload = neigh_entry->second;
+            }
+            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy,nextload);
             newEntry.addRoutingEntity(newEntity);
             m_routing_table.Update (newEntry);
             // logInfo("Stopping RREQ timer TODO");
@@ -1688,7 +1817,14 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
             RoutingTableEntry newEntry = RoutingTableEntry(dst, packet.at(RREP_PACKET_DESTINATION_SEQ),255, route_list, packet.at(RREP_PACKET_LIFETIME),device_ip_address);
             newEntry.SetNextHop();
             newEntry.SetValidSeqNo(true);
-            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy); 
+            auto neigh_entry = neighbour_load.find(packet.at(RREP_PACKET_SENDER));
+            uint32_t nextload = 0;
+            if (neigh_entry!=neighbour_load.end())
+            {
+                //found
+                nextload = neigh_entry->second;
+            }
+            RouteEntity newEntity = RouteEntity(packet.at(RREP_PACKET_SENDER),hop,src,m_cetx,m_cete,re_energy,nextload); 
             newEntry.addRoutingEntity(newEntity);
             m_routing_table.Update (newEntry);
             logInfo("Stopping RREQ timer TODO");
@@ -1836,6 +1972,29 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
  
 void receive_ack (std::vector<uint8_t> packet)
 {
+    //Track the timing of the r_ack packets
+        if(m_r_ack_tracker.empty())
+    {
+        //simply add the new entry
+        m_r_ack_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
+        }
+    else
+    {
+        //check if it is in the map
+        auto element = m_r_ack_tracker.find(packet.at(RREP_PACKET_DESTINATION_IP));
+        if (element->first == packet.at(RREP_PACKET_DESTINATION_IP))
+        {
+            //the key does exhist update the value
+            element->second = clock();
+            }
+        else 
+        {
+            //the key does not exhists so add it to the timer watch list
+            m_r_ack_tracker.insert(std::make_pair (packet.at(RREP_PACKET_DESTINATION_IP), clock()));
+        }
+
+    }
+
         //Create dummy routelist for entry initialization
     std::vector<RouteEntity> route_list;
     std::cout<<"Time "<<clock()<<"(cycles) Received an acknowledge from "<<packet.at(R_ACK_PACKET_SENDER)<<endl;
@@ -1886,7 +2045,7 @@ void receive_rrer(std::vector<uint8_t> p, uint8_t src)
             RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);;
             if (m_routing_table.LookupRoute (un.first, toDst))
             {
-                RouteEntity remover = RouteEntity(src,0,0,0,0,0);
+                RouteEntity remover = RouteEntity(src,0,0,0,0,0,0);
                 if(toDst.removeSpecificEntity(remover))
                 {
                     //was removed
@@ -2139,9 +2298,18 @@ void message_queue_handler(void)
                 //routte exhists so forward
                 if(message_request_queue.Dequeue(destination_ip_address, handleRequest))
                 {
+                    if ((handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)==255) || (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address))
+                    {
                     //Successfully dequed packet
                     logInfo("Calling function forward_message line 1453");
                     forward_message(handleRequest.GetPacket(),destination_ip_address,device_ip_address);
+                    }
+                    else
+                    {
+                std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
+                <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
+                    }
+
                 }
                 else {
                     std::cout<<"Odd it just disappeared"<<endl;
@@ -2527,6 +2695,13 @@ void Hallo_Timer_Expire()
     logInfo ("Sending Hallo");
     clock_t offset = clock();
     std::vector<uint8_t> delete_list; //stores dst to be removed
+    //The assumption with r_ack is as follows
+    //I trust nodes to manage r_ack and neighbours
+    //When I receive a hallo I am aware of the neighbour also I know they are in range of me as such they will receive my hallo (uplink)
+    //I expect the r_ack. If none is received I retry by sending a hallo as usual, if no down link r_ack is received after n amount of time then the link is unreliable
+    //As such forget about the entity
+
+    //This first part deals with basic hallo functionality
     for (std::map<uint8_t, clock_t>::const_iterator i = m_hallo_tracker.begin (); i!= m_hallo_tracker.end ();i++ )
     {
         if (i->second <offset-HELLO_INTERVAL*CLOCKS_PER_SEC/1000)
@@ -2585,13 +2760,82 @@ void Hallo_Timer_Expire()
                 }
                 
         }//for
-        
-        //broad cast hallos
-        //FOr now test the RREQ
+    
+
+        //The second part implements the r_ack timers
+        //Additionally counter fields and check fields are reset when r_ack is received as usual.
+        //time gets added when hallo has been received as such we know we expect r_ack frokm them
+        //Time gets updated to current time when r_ack has been received
+
+        //Nodes that fail r_ack checks should be added to the delete stack.
+    for (std::map<uint8_t, clock_t>::const_iterator i = m_r_ack_tracker.begin (); i!= m_r_ack_tracker.end ();i++ )
+    {
+        if (i->second <offset-HELLO_INTERVAL*CLOCKS_PER_SEC/1000)
+        {
+            //That means I haven't recently obtained a response from the destination
+            if (m_r_ack_retry.empty())
+            {
+                //This means it will be the first entry
+                m_r_ack_retry.insert(std::make_pair (i->first, 1));
+                }//if
+            else
+            {
+                //it is not empty so we need to find if it is in 
+                auto element=m_r_ack_retry.find(i->first);
+                if (element->first==i->first)
+                {
+                    //find returns end() if not found. So then element differs
+                    //check if what was found is the same thejn update else add to map
+                    if(element->second>ALLOWED_R_ACK_LOSS)
+                    {
+                        //drops exceed the limit thus link error
+                        //Also remove it from both lists
+                        delete_list.push_back(element->first);
+                        //I should mark it as unreliable thus break?????
+
+                        SendRerrWhenBreaksLinkToNextHop(element->first);
+                        }
+                    else
+                    {
+                        //update element
+                        element->second+=1;
+                        }
+                }
+                else
+                {
+                    //it is not actually in yet so insert it
+                    m_r_ack_retry.insert(std::make_pair (i->first, 1));
+                    }
+                
+                }//else
+            
+            }//if
+            else
+            {
+                //here we check if there was retries and then set them to 0
+                if (!m_r_ack_retry.empty())
+                {
+                    //only care if any element
+                    auto element=m_r_ack_retry.find(i->first);
+                    if (element->first==i->first)
+                    {
+                        //exhisted so update to 0
+                        element->second = 0;
+                        }
+                    }
+                
+                }
+                
+        }//for
+
+
+        //Manages what should be deleted
         for (std::vector<uint8_t>::const_iterator i = delete_list.begin (); i != delete_list.end (); ++i)
         {
                 m_hallo_retry.erase(*i);
                 m_hallo_tracker.erase(*i);
+                m_r_ack_retry.erase(*i);
+                m_r_ack_tracker.erase(*i);
                 //Link has broken no use to keep track of parameters for this entitiy
                 neighbour_ete.erase(*i);
                 neighbour_etx.erase(*i);
@@ -3068,6 +3312,8 @@ void Update_neighbour_load(uint8_t neigh_address, uint32_t load)
         {
             //entry found now update count
             entry->second = load;
+            //Update all routing entries with the new load
+            m_routing_table.SetLoadTableEntriesWithNextHop(neigh_address, load);
         }
         else {
         //insert a new element

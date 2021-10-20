@@ -127,17 +127,20 @@ public:
     void update_LoRa_path() //Used to update what path sould be chosen. For now forward to path with the smallest hop
     {
         //Assuming made here it is new hop look at smallest hop best
-        m_LoRa_route.SetNextHop(m_route_list.front().get_next_hop());
+        //Assuming made here it is new hop look at smallest hop best
+        uint8_t max_hop = 255;
+
         for (int i = 1; i<m_route_list.size(); i++)
-         {
-          if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
-          {
-            //This is smaller so make this next hop
-            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
-            m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+        {
+            if (m_route_list.at(i).get_hopcount()<max_hop)
+            {
+                    //SMaller hop count thus update
+                    max_hop = m_route_list.at(i).get_hopcount();
+                    m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
+                    std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 140 with count "<<max_hop<<endl;
+                }
             }
-        }         
-    }
+        }          
 
 ///////////////////////////////////////////////
     void getPrecursorsEntry(std::vector<uint8_t> output)
