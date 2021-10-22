@@ -26,7 +26,7 @@
 
 //Select the current protocol version
 #if !defined(ACTIVE_VERSION)
-#define ACTIVE_VERSION  LR_EE_AOMDV_LD_LR
+#define ACTIVE_VERSION  AODV
 #endif
 
 //NOTE ALL TIMING IS DONE IN MS

@@ -30,12 +30,12 @@ int main() {
     uint8_t tx_power;
     uint8_t frequency_band;
 
-    pc.baud(115200);
+    pc.baud(9600);
     
     // Setup a serial interrupt function to receive data
     pc.attach(&Rx_interrupt, UnbufferedSerial::RxIrq);
     
-    mts::MTSLog::setLogLevel(mts::MTSLog::TRACE_LEVEL);
+    mts::MTSLog::setLogLevel(mts::MTSLog::NONE_LEVEL);
 
     // Create channel plan
     plan = create_channel_plan();
@@ -128,11 +128,8 @@ int main() {
             tx_data.insert(tx_data.begin(),type);
 
             QueueEntry newEntry (tx_data,QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000);
-            std::cout<<"Enqeued entry with dead time "<<std::to_string(newEntry.GetExpireTime())<<" Current time is "<<std::to_string(clock())<<endl;
-            std::cout<<"Total clock cycles that it will survive "<<std::to_string(QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000)<<" now it is "<<std::to_string(newEntry.GetTimeTillExpire())<<endl;
            if(!message_request_queue.Enqueue(newEntry))
            {
-               std::cout<<"Error enqeueing in line 112"<<endl;
            }
            rx_bit = 0;
            rx_in = 0;
@@ -175,7 +172,12 @@ void start()
         main_queue.event(message_queue_handler);
     #elif ACTIVE_USER == ROUTING_NODE
         //Assigning random unique address
-        device_ip_address = RNG.getByte() % 7;
+        //255 is reserved as wild card as such can't be that number. Further 20 and 100 is reserved
+        while ((device_ip_address==0)||(device_ip_address==20)||(device_ip_address==100))
+        {
+            //as long not 0,20,100 then keep this else reassign
+            device_ip_address = RNG.getByte() % 200; 
+        }
         rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
         h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
         routing_t.attach(&queue_request_queue_handler,1s);
@@ -458,7 +460,6 @@ void SendRerrWhenNoRouteToForward(uint8_t dst, uint8_t dstSeqNo, uint8_t origin)
 
 void SendRerrWhenBreaksLinkToNextHop(uint8_t nextHop)
 {
-    std::cout<<"Sending RRER since link to "<<nextHop<<" broke.";
     std::vector<RouteEntity> route_list;
     std::vector<uint8_t> precursors;
     std::map<uint8_t, uint32_t> unreachable;
@@ -608,12 +609,9 @@ bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
        if (toDst.GetFlag () == VALID)
          {
            LoRaRoute route = toDst.GetRoute ();
-            std::cout<<"Received message ";
            for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
            {
-               std::cout<<*i;
            }
-            std::cout<<" from "<<origin<<" forwarding it to "<<route.GetNextHop ()<<" destination is "<<dst<<endl;
   
            /*
             *  Each time a route is used to forward a data packet, its Active Route
@@ -672,7 +670,6 @@ bool Route_Input(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
    // Duplicate of own packet
    if (origin == device_ip_address)
      {
-         std::cout<<"Why did origin receive message from itself"<<endl;
        return true;
      }
   
@@ -693,12 +690,9 @@ bool Route_Input(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
          {
            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
            myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-           std::cout<<"Received message ";
            for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
            {
-               std::cout<<*i;
            }
-            std::cout<<" from "<<origin<<endl;
          }
        return true;
      }
@@ -1321,7 +1315,6 @@ void request_queue_handler(void)
                         //Handle RERR Messages
                         if ((packet.at(RREP_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RREP_PACKET_RECIPIENT)==255))
                         {
-                            std::cout<<"Time "<<clock()<<"(cycles): I received an RRER"<<endl;
                             receive_rrer(packet,packet.at(RRER_PACKET_SENDER));
                         }
                         break;
@@ -1334,14 +1327,12 @@ void request_queue_handler(void)
                             if (packet.at(RREP_PACKET_SENDER)!=20)
                             {
                                 //not the client so this is fine
-                        logInfo("Got a hello message");
                         ProcessHello(packet);
                             }
                         #elif ACTIVE_USER == CLIENT_NODE
                             if (packet.at(RREP_PACKET_SENDER)!=100)
                             {
                                 //not the client so this is fine
-                        logInfo("Got a hello message");
                         ProcessHello(packet);
                             }                            
                         #else
@@ -1392,21 +1383,16 @@ void message_queue_handler(void)
             //Dequed fine
             if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
             {
-               std::cout<<"Routed forward line 1393"<<endl; //successfully routed
             }
             else
             {
-                std::cout<<"Couldn't route forward line 1397"<<endl;
             }                
             }
             else {
-            std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
-            <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
             }
         }
         else
         {
-            std::cout<<"Dequeue failure line 1407"<<endl;
         }
 
     #elif ACTIVE_USER == ROUTING_NODE   
@@ -1417,21 +1403,16 @@ void message_queue_handler(void)
                     //Dequed fine
                     if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
                     {
-                    std::cout<<"Routed forward line 1419"<<endl; //successfully routed
                     }
                     else
                     {
-                        std::cout<<"Couldn't route forward line 1423"<<endl;
                     }    
             }
             else {
-            std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
-            <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
             }
         }
         else
         {
-            std::cout<<"Dequeue failure line 1389"<<endl;
         }
     #elif ACTIVE_USER == CLIENT_NODE
         //First check if route has been made 
@@ -1457,13 +1438,11 @@ void message_queue_handler(void)
                     }
                     else
                     {
-                std::cout<<"Packet dropped since received a message from "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" with intended receiver "
                 <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
                     }
 
                 }
                 else {
-                    std::cout<<"Odd it just disappeared"<<endl;
                 }
 
             }
@@ -1561,14 +1540,12 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     output.push_back(prefix_size);
     output.push_back(hop_count);
     output.push_back(lifetime);
-    std::cout<<"The life time value for RREP is "<<lifetime<<endl;
     output.push_back(destination_add);
     output.push_back(dest_seq_num);
     output.push_back(source_add);
     output.push_back(m_ttl);
     output.push_back(r_ack);
     //wait for the radio to be done
-    std::cout<<"Sending "<<output.size()<<" bytes "<<endl;
     wait_on_radio();
     return send_data(output);
     
@@ -1826,7 +1803,6 @@ void Hallo_Timer_Expire()
         {
                 m_hallo_retry.erase(*i);
                 m_hallo_tracker.erase(*i);
-                std::cout<<"Deleting expired neighbour "<<*i<<endl;
         }    
         wait_on_radio();
         SendHallo();
@@ -1845,10 +1821,9 @@ void Hallo_Timer_Expire()
         RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
         if(!m_routing_table.LookupRoute (destination_ip_address, toDst))
         {
-            std::cout<<"Not in the table"<<endl;
         }
         else {
-            m_routing_table.Print();
+            // m_routing_table.Print();
         }
         ///
         std::vector<uint8_t> delete_list; //stores dst to be removed
@@ -1877,7 +1852,6 @@ void Hallo_Timer_Expire()
                     {
                         //drops exceed the limit thus link error
                         //Also remove it from both lists
-                        std::cout<<"The route to destination "<<element->first<<" could not be found "<<endl;
                         ScheduleRreqRetry(element->first);
                         delete_list.push_back(element->first);
                         }
@@ -1907,12 +1881,10 @@ void Hallo_Timer_Expire()
         }
                 for (std::vector<uint8_t>::const_iterator i = delete_list.begin (); i != delete_list.end (); ++i)
         {
-                std::cout<<"RREQ for destination "<<*i<<" being dropped line 1782"<<endl;
                 m_addressReqTimer.erase(*i);//Deleting all entries after visited
                 m_rreq_retry.erase(*i);
                 //All packets from message queue should be removed
                 message_request_queue.DropPacketWithDst(*i);
-                std::cout<<"Deleting route entry for "<<*i<<" being dropped line 1869"<<endl;
                 m_routing_table.DeleteRoute(*i);
         }
     }
@@ -1931,7 +1903,6 @@ void Hallo_Timer_Expire()
         else
             {
             uint16_t backoffFactor = rt.GetRreqCnt () - 1;
-            std::cout<<"Applying binary exponential backoff factor "<<backoffFactor<<endl;
             retry = NODE_TRAVERSAL_TIME * (1 << backoffFactor) * CLOCKS_PER_SEC/1000 + clock();
             }
 
@@ -1950,7 +1921,6 @@ void Hallo_Timer_Expire()
             if (r_retry->second>RREQ_RETRIES)
             {
                 //Remove this 
-                std::cout<<"Erasing RREQ for destination "<<dst<<endl;
             }
             else {
                 element->second = retry;

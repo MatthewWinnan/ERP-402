@@ -179,9 +179,9 @@ void
 //RequestQueue::Drop (QueueEntry en, std::string reason)
 RequestQueue::Drop (QueueEntry en, std::string reason)
 {
-    std::cout<<"Dropped packet to "<<en.GetPacket().at(MESSAGE_PACKET_DESTINATION)<<": "<<reason<<endl;
-    std::cout<<"Packet dies at "<<std::to_string(en.GetExpireTime())<<" the current time is "<<std::to_string(clock())<<endl;
-    std::cout<<" Time to expire "<<std::to_string(en.GetTimeTillExpire())<<endl;
+    // std::cout<<"Dropped packet to "<<en.GetPacket().at(MESSAGE_PACKET_DESTINATION)<<": "<<reason<<endl;
+    // std::cout<<"Packet dies at "<<std::to_string(en.GetExpireTime())<<" the current time is "<<std::to_string(clock())<<endl;
+    // std::cout<<" Time to expire "<<std::to_string(en.GetTimeTillExpire())<<endl;
 
     return;
 }

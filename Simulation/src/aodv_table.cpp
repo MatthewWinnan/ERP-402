@@ -89,12 +89,10 @@ bool RoutingTableEntry::LookupPrecursor(uint8_t id) {
         if (*i == id)
         {
 //            logInfo ("Precursor " << id << " found");
-            std::cout << "Precursor" << id << " found"<< std::endl;
             return true;
         }
     }
 //    logInfo ("Precursor " << id << " not found");
-    std::cout << "Precursor" << id << " not found"<< std::endl;
     return false;
 }
 
@@ -104,13 +102,11 @@ bool RoutingTableEntry::DeletePrecursor(uint8_t id) {
     if (i == m_precursorList.end ())
     {
 //        logInfo ("Precursor " << id << " not found");
-        std::cout << "Precursor" << id << " not found"<< std::endl;
         return false;
     }
     else
     {
 //        logInfo ("Precursor " << id << " found");
-        std::cout << "Precursor" << id << " found"<< std::endl;
         m_precursorList.erase (i, m_precursorList.end ());
     }
     return true;
@@ -118,7 +114,6 @@ bool RoutingTableEntry::DeletePrecursor(uint8_t id) {
 
 void RoutingTableEntry::DeleteAllPrecursors() {
 //    logInfo ("Clearing all precursors");
-    std::cout << "Clearing all Precursor"<< std::endl;
     m_precursorList.clear ();
 }
 
@@ -162,7 +157,6 @@ void RoutingTableEntry::Invalidate(clock_t badLinkLifetime , uint8_t index) {
 }
 
 void RoutingTableEntry::Print() const {
-    std::cout << "TODO PRINT ROUTING ENTRY INFO"<< std::endl;
 }
 
 void RoutingTableEntry::Invalidate(clock_t badLinkLifetime) {
@@ -180,7 +174,6 @@ m_badLinkLifetime = t;
 }
 
 bool RoutingTable::AddRoute(RoutingTableEntry &r , uint8_t index) {
-    std::cout << "Adding a route " << std::endl;
     Purge ();
     if (r.GetFlag () != IN_SEARCH)
     {
@@ -192,26 +185,20 @@ bool RoutingTable::AddRoute(RoutingTableEntry &r , uint8_t index) {
 }
 
 bool RoutingTable::DeleteRoute(uint8_t dst) {
-    std::cout << "Deleting route " << dst <<" from index "<< std::endl;
     Purge ();
     if (m_LoRaAddressEntry.erase (dst) != 0)
     {
-        std::cout << "Success delete " << dst <<" from index "<<std::endl;
         return true;
     }
-    std::cout << "Fail Delete " << dst <<" from index "<< std::endl;
     return false;
 }
 
 bool RoutingTable::DeleteRouteIndex(uint8_t dst, uint8_t index) {
-    std::cout << "Deleting route " << dst <<" from index "<<index<< std::endl;
     Purge ();
     if (m_LoRaAddressEntry.at(dst).removeRouteEntity(index) != 0)
     {
-        std::cout << "Success delete " << dst <<" from index "<<index<< std::endl;
         return true;
     }
-    std::cout << "Fail Delete " << dst <<" from index "<<index<< std::endl;
     return false;
 }
 
@@ -219,25 +206,21 @@ bool RoutingTable::LookupRoute(uint8_t dst, RoutingTableEntry &rt) {
     Purge ();
     if (m_LoRaAddressEntry.empty ())
     {
-        std::cout<<"Route to " << dst << " not found; m_LoRaAddressEntry is empty"<<std::endl;
         return false;
     }
     std::map<uint8_t, RoutingTableEntry>::const_iterator i =
             m_LoRaAddressEntry.find (dst);
     if (i == m_LoRaAddressEntry.end ())
     {
-        std::cout<<"Route to " << dst << " not found"<<std::endl;
         return false;
     }
     rt = i->second;
-    std::cout<<"Route to " << dst << " found"<<std::endl;
     return true;
 }
 
 bool RoutingTable::LookupValidRoute(uint8_t id, RoutingTableEntry &rt) {
     if (!LookupRoute (id, rt))
     {
-        std::cout<<"Route to " << id << " not found"<<std::endl;
         return false;
     }
     return (rt.GetFlag () == VALID);
@@ -338,27 +321,27 @@ void RoutingTable::InvalidateRoutesWithDst(const std::map<uint8_t, uint32_t> &un
 
 void RoutingTable::Print()  {
     Purge ();
-    std::cout<<"----ROUTING TABLE HAS THE CONTENTS------"<<endl;
-        for (std::map<uint8_t, RoutingTableEntry>::const_iterator i =
-            m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
-    {
-        if (i->second.GetFlag()==VALID)
-        {
-            std::cout<<"Destination :"<<i->first<<" has a VALID path"<<endl;
-        }
-        else  if (i->second.GetFlag()==IN_SEARCH)
-        {
-            std::cout<<"Destination :"<<i->first<<" has a IN_SEARCH path"<<endl;
-        }
-        else {
-        std::cout<<"Destination :"<<i->first<<" has a INVALID path"<<endl;
-        }
-        //TODO print all paths in entry
-        std::cout<<"Next hop: "<<i->second.GetNextHop(0)<<endl;
-        std::cout<<"Hop Count: "<<i->second.GetHop()<<endl;
-        std::cout<<"Sequence number: "<<i->second.GetSeqNo()<<endl;
+    // std::cout<<"----ROUTING TABLE HAS THE CONTENTS------"<<endl;
+    //     for (std::map<uint8_t, RoutingTableEntry>::const_iterator i =
+    //         m_LoRaAddressEntry.begin (); i != m_LoRaAddressEntry.end (); ++i)
+    // {
+    //     if (i->second.GetFlag()==VALID)
+    //     {
+    //         std::cout<<"Destination :"<<i->first<<" has a VALID path"<<endl;
+    //     }
+    //     else  if (i->second.GetFlag()==IN_SEARCH)
+    //     {
+    //         std::cout<<"Destination :"<<i->first<<" has a IN_SEARCH path"<<endl;
+    //     }
+    //     else {
+    //     std::cout<<"Destination :"<<i->first<<" has a INVALID path"<<endl;
+    //     }
+    //     //TODO print all paths in entry
+    //     std::cout<<"Next hop: "<<i->second.GetNextHop(0)<<endl;
+    //     std::cout<<"Hop Count: "<<i->second.GetHop()<<endl;
+    //     std::cout<<"Sequence number: "<<i->second.GetSeqNo()<<endl;
 
-    }
+    // }
     
 }
 

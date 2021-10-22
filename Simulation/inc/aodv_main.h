@@ -41,18 +41,6 @@ void message_queue_handler(void);
 #if ACTIVE_USER == DESTINATION_NODE
     uint8_t device_ip_address = 100;
     uint8_t destination_ip_address = 100;
-    #if ACTIVE_VERSION == AOMDV
-    //Unique RREQ respond method to maintain link disjointness
-    uint8_t k = 3; //Amount of copies from unique source neighbour to respond to
-    //Tracks the amount of responses to a unique source neighbour
-    //KEY            VALUE
-    //source_neigh   amount received
-    std::map<uint8_t, uint8_t> source_neighbour_reply_amount;
-    // //Tracks the devices that broadcasted the RREQ from unique source to see if a new RREQ
-    // //KEY            VALUE
-    // //source_neigh   list of neighbours of destination
-    // std::map<uint8_t, std::vector<uint8_t>> source_neighbour_receive_list;
-    #endif
 #elif ACTIVE_USER == ROUTING_NODE
     Random RNG = Random();
     uint8_t device_ip_address = 0;

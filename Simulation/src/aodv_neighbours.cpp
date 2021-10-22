@@ -64,11 +64,9 @@ void Neighbors::RemoveNeighbour(uint8_t dst)
     if (index!=-1)
     {
         m_nb.erase(m_nb.begin()+index);
-        std::cout<<"Neighbour "<<dst<<" removed at index."<< index<<endl;
     }
     else
     {
-        std::cout<<"Neighbour "<<dst<<" does not exist."<<endl;
     }
 }
 struct CloseNeighbor
