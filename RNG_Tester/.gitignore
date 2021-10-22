@@ -1,9 +1,7 @@
 .build
 .mbed
 projectfiles
+*.py*
 mbed-os
 BUILD
-.exe
-WHEEL
-METADATA
-Crypto
+
