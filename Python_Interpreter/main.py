@@ -13,8 +13,8 @@ plt.rcParams.update({'font.size': 13})
 #Setting COM options
 COM_PORT = 'COM19'
 BAUD_RATE = 9600
-NUM_SAMPLES = 40  # 1 minute
-BYTES_PER_PACKET = 1
+NUM_SAMPLES = 120  # 1 minute
+BYTES_PER_PACKET = 6
 BYTE_ORDER = 'little'  # or 'big'
 SAMPLING_FREQ = 1  # Hz
 
@@ -27,21 +27,33 @@ SENSOR_LIST = ['RNG']
 AXIS_LIST = ['R']
 DATATYPE_LIST = ['Mag']
 ARR = [RNG_array]
-
-
+measurement = []
+read_flag = False
 def rxDataPoint():
     global global_counter
     global ser
+    global measurement
+    global read_flag
     global_counter += 1
-
-    rxData = ser.read(BYTES_PER_PACKET * 3)
-    if global_counter == 0:
-        print("Readings started.")
-        print(rxData)
-
-    RNG_array[global_counter][0] = rxData[0]
-    RNG_array[global_counter][1] = rxData[1]
-    RNG_array[global_counter][2] = rxData[2]
+    #Read the first ine
+    rxData = ser.read(1)
+    int_val = int.from_bytes(rxData, "big")
+    #Denotes the start of measurements
+    if int_val==ord('S'):
+        print("Yes")
+        read_flag = True
+        measurement = []
+    #Denotes the end of measurements
+    elif int_val==ord('0'):
+        print(measurement)
+        read_flag = False
+        measurement = []
+    else:
+        measurement.append(int_val)
+    print(int_val)
+    # RNG_array[global_counter][0] = rxData[0]
+    # RNG_array[global_counter][1] = rxData[1]
+    # RNG_array[global_counter][2] = rxData[2]
 
 
 if __name__ == "__main__":
@@ -63,7 +75,6 @@ if __name__ == "__main__":
 
     lines = []
     for i in range(NUM_SAMPLES):
-        print(str(i/NUM_SAMPLES*100)+"% done:")
         rxDataPoint()
         # remove old lines
         # for line in lines:
@@ -84,7 +95,7 @@ if __name__ == "__main__":
         #     if j == 2:
         #         plt.legend(loc='upper right')
         # plt.grid(True)
-        plt.pause(0.008)
+        plt.pause(0.33)
 
     print(RNG_array)
     plt.close()
