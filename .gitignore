@@ -7,3 +7,8 @@ BUILD
 WHEEL
 METADATA
 Crypto
+*.py*
+.xml
+.iml
+.npy
+.pem

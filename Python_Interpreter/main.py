@@ -13,7 +13,7 @@ plt.rcParams.update({'font.size': 13})
 #Setting COM options
 COM_PORT = 'COM19'
 BAUD_RATE = 9600
-NUM_SAMPLES = 40000  # 1 minute
+NUM_SAMPLES = 40  # 1 minute
 BYTES_PER_PACKET = 1
 BYTE_ORDER = 'little'  # or 'big'
 SAMPLING_FREQ = 1  # Hz
