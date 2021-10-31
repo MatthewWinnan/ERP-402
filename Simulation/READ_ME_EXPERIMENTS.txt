@@ -173,3 +173,18 @@ Client_TX_Amount = []
 2) Index of node in Client_TX_Amount corresponds to index of node in CLient_Add
 3) Index in Client_TX_Amount[x] corresponds to the destination index in CLIENT_TO_DEST_add[x]
 4) Client_TX_Amount[x][y] is the time series for the TX of packets
+
+
+#STores the PDR for each link between node x and neighbour y
+NODE_PDR_value = []
+1) 3-D array stores the pdr of the link between node x and neighbour y
+2) Index of node in NODE_PDR_value corresponds to index of node in Node_index
+3) Index in NODE_PDR_value[x] corresponds to the neighbour index in PACKETS_received[x]
+4) NODE_PDR_value[x][y] is the time series of the pdr for the link
+
+#Stores the ETX for each link between node x and neighbour y
+NODE_ETX_value = []
+1) 3-D array stores the etx of the link between node x and neighbour y
+2) Index of node in NODE_ETX_value corresponds to index of node in Node_index
+3) Index in NODE_ETX_value[x] corresponds to the neighbour index in PACKETS_received[x]
+4) NODE_ETX_value[x][y] is the time series of the etx for the link

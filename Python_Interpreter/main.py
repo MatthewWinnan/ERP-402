@@ -6,8 +6,6 @@ import seaborn as sns
 from IPython.display import clear_output
 import bitstring
 
-
-
 #Setting Print Options For The Terminal
 np.set_printoptions(precision=4, linewidth=170, edgeitems=10, floatmode='fixed', sign=' ')
 plt.rcParams["font.family"] = "Times New Roman"
@@ -18,7 +16,7 @@ live = False
 #General COM parameters
 BYTE_ORDER = 'big'  # or 'big'
 SAMPLING_FREQ = 0.2  # Hz (every 5 sec)
-SAMPLING_TIME = 60 # Time to sample in seconds
+SAMPLING_TIME = 20 # Time to sample in seconds
 NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
 BAUD_RATE = 9600
 
@@ -30,6 +28,14 @@ COM_PORT_NODE_2 = 'COM35'
 COM_PORT_NODE_3 = 'COM30'
 COM_PORT_NODE_4 = 'COM3'
 COM_PORT_NODE_DESTINATION = 'COM33'
+
+#TEST PARAMETERS
+# What test are we doing????
+current_test = 0
+# Define the test strings
+test_array = ["Case_1"]
+#Measurements taken
+measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node"]
 
 #Store the addresses here
 #Address index corresponds to index of the measured node
@@ -77,6 +83,11 @@ Dest_RX_Amount = []
 Dest_PING_Amount = []
 #Stores the amount of messages sent by client to destination per epoch
 Client_TX_Amount = []
+#STores the PDR for each link between node x and neighbour y
+NODE_PDR_value = []
+#Stores the ETX for each link between node x and neighbour y
+NODE_ETX_value = []
+
 X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
 
 # Libraries to decode byte stream
@@ -94,8 +105,8 @@ current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
 #Libraries for graphing
-DATATYPE_LIST = ['Load (packets/s)']
-LINE_COLORS = [] #TODO add possible line colors
+DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link']
+LINE_COLORS = ['b','g','r','c','m','y','k','w']
 
 def wait_for_start(ser):
     global rxData
@@ -1411,6 +1422,90 @@ if __name__ == "__main__":
         for i in range(NUM_SAMPLES):
             rx_Read_Dest(ser_Test,i)
             plt.pause(1/SAMPLING_FREQ)
+        print("########### Starting Plotting Data ###########")
+        #Print the load data
+        plt.ylabel(DATATYPE_LIST[0])
+        plt.xlabel("Time (s)")
+        # fig.tight_layout()
+        plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+        plt.grid(True)
+        #Obtaining the legend array
+        legend = []
+        for i in range (0,len(NODE_index)):
+            legend.append("Node "+str(NODE_index[i]))
+        for i in range(0,len(LOAD_array)):
+            plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
+        plt.legend(legend)
+        plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
+        plt.show()
+        plt.close()
+        #Print the load data
+        #Now plotting the PDR data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[1])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                plt.plot(X_axis, PDR_data, LINE_COLORS[j])
+                holder.append(PDR_data)
+            NODE_PDR_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[1] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        #Now plotting the ETX data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[2])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                plt.plot(X_axis, CETX_data, LINE_COLORS[j])
+                holder.append(CETX_data)
+            NODE_ETX_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[2] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+
+
 
     # print(RNG_array)
     # plt.close()
