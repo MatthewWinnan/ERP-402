@@ -17,8 +17,9 @@ live = False
 #Setting COM options
 #General COM parameters
 BYTE_ORDER = 'big'  # or 'big'
-SAMPLING_FREQ = 0.25  # Hz
-NUM_SAMPLES = 120  # 1 minute
+SAMPLING_FREQ = 0.2  # Hz (every 5 sec)
+SAMPLING_TIME = 60 # Time to sample in seconds
+NUM_SAMPLES = SAMPLING_TIME/(1/SAMPLING_FREQ)  # 1 minute
 BAUD_RATE = 9600
 
 #PORTS for specific devices
@@ -687,66 +688,64 @@ def read_in_ROUTING_TABLE(ser):
     #We do this until an end line is obtained
     rxData = int.from_bytes(ser.read(1), "big")
     #We can do this outside as this measurement only repeats the TE entries
-
-    # First reset trackers
-    header = 0
-    current_header = ''
-    # First measurement is address
-    if rxData not in NODE_index:
-        NODE_index.append(rxData)
-    # Create the first entry into dest list if none exhists
-    if len(NODE_TO_DEST_add) == 0:
-        holder = []
-        NODE_TO_DEST_add.append(holder)
-    # Create first enrty into chosen path list if none echists
-    if len(ROUTING_table_path) == 0:
-        holder = []
-        ROUTING_table_path.append(holder)
-
-    # Obtain the index of the node
-    Address_Index = NODE_index.index(rxData)
-    # Now wait for the queue to start obtaining the destination address
-    rxData = int.from_bytes(ser.read(1), "big")
-    wait_for_header('DA', ser)
-    # Remember last read byte is not looked at by while loop
-    # Thus that is the start of the address
-    destination_add = rxData
-    # if neighbour_add not in NEIGH_add[Address_Index]:
-    #     NEIGH_add[Address_Index].append(neighbour_add)
-    if len(NODE_TO_DEST_add) == Address_Index:
-        holder = [destination_add]
-        NODE_TO_DEST_add.append(holder)
-    else:
-        if destination_add not in NODE_TO_DEST_add[Address_Index]:
-            NODE_TO_DEST_add[Address_Index].append(destination_add)
-
-    Address_Index_Dest = NODE_TO_DEST_add[Address_Index].index(destination_add)
-    # Now obtain the chosen path , first wait for header
-    rxData = int.from_bytes(ser.read(1), "big")
-    # Clear header trackers
-    header = 0
-    current_header = ''
-    # Now wait for the SNR start header
-    wait_for_header('CP', ser)
-    # Remember last read byte is not looked at by while loop
-    # Thus that is the start of the chosen path
-    chosen_path_add = rxData
-    if len(ROUTING_table_path) == Address_Index:
-        holder = [chosen_path_add]
-        ROUTING_table_path.append(holder)
-    else:
-        if chosen_path_add not in ROUTING_table_path[Address_Index]:
-            ROUTING_table_path[Address_Index]=chosen_path_add
-
-    # Now obtain the next hop values
-    rxData = int.from_bytes(ser.read(1), "big")
-    # Clear header trackers
-    header = 0
-    current_header = ''
-    # Now wait for the table enrty start header
-    wait_for_header('TE', ser)
-
     while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        # Create the first entry into dest list if none exhists
+        if len(NODE_TO_DEST_add) == 0:
+            holder = []
+            NODE_TO_DEST_add.append(holder)
+        # Create first enrty into chosen path list if none echists
+        if len(ROUTING_table_path) == 0:
+            holder = []
+            ROUTING_table_path.append(holder)
+
+        # Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        # Now wait for the queue to start obtaining the destination address
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_header('DA', ser)
+        # Remember last read byte is not looked at by while loop
+        # Thus that is the start of the address
+        destination_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NODE_TO_DEST_add) == Address_Index:
+            holder = [destination_add]
+            NODE_TO_DEST_add.append(holder)
+        else:
+            if destination_add not in NODE_TO_DEST_add[Address_Index]:
+                NODE_TO_DEST_add[Address_Index].append(destination_add)
+
+        Address_Index_Dest = NODE_TO_DEST_add[Address_Index].index(destination_add)
+        # Now obtain the chosen path , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        # Now wait for the SNR start header
+        wait_for_header('CP', ser)
+        # Remember last read byte is not looked at by while loop
+        # Thus that is the start of the chosen path
+        chosen_path_add = rxData
+        if len(ROUTING_table_path) == Address_Index:
+            holder = [chosen_path_add]
+            ROUTING_table_path.append(holder)
+        else:
+            if chosen_path_add not in ROUTING_table_path[Address_Index]:
+                ROUTING_table_path[Address_Index] = chosen_path_add
+
+        # Now obtain the next hop values
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        # Now wait for the table enrty start header
+        wait_for_header('TE', ser)
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
