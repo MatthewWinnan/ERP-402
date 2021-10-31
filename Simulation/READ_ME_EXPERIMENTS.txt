@@ -56,14 +56,120 @@ Following are additional parameters to be sent by destination node.
 10) Is calculated by using 9's Ping reading
 
 Following are addtional parameters sent by the source node.
-8) ['Source node address','M','S','Amount of messages sent','\n']
+8) ['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
 9) Is calculated by using the data from 8 for both the source and destination 
 
 For the simulator the data is stored as follows:
+NODE_index = []
+1) 1-D array stores addresses of known nodes for use in neighbour tracking and link tracking
+2) index of address corresponds to index of known node for future use
 
-NODE_index keeps track of the index of the nodes in their corresponding measurement arrays
+#Store neighbour addresses here
+NEIGH_add = []
+1) 2-D array stores the known neighbours for each node
+2) Each 1-D entry in NEIGH_add is a node. The index of that node corresponds to Node_index
+3) Each 1-D entry in NEIGH_add[x] is a known neighbour. The index of that neighbour corresponds to it's index for future use
 
-LOAD_array stores the time step load for each node.
+#Store destination address here
+DEST_add = []
+1) 1-D array stores addresses of known destinations for use in rx and ping tracking
+2) index of address corresponds to index of known node for future use
 
-PACKETS_sent_add keeps track of the index of the nodes sent to in 2)
-PACKETS_sent keeps track of amount of packets sent to node 
+#STores client addresses here
+CLIENT_add = []
+1) 1-D array stores addresses of known clients for use in tx tracking
+2) index of address corresponds to index of known node for future use
+
+#Stores destination to client adds here
+DEST_TO_CLIENT_add = []
+1) 2-D array stores the known clients for each destination
+2) Each 1-D entry in DEST_TO_CLIENT_add is a destination. The index of that destination corresponds to Dest_add
+3) Each 1-D entry in DEST_TO_CLIENT_add[x] is a known client for the destination. The index of that client corresponds to it's index for future use
+
+#Stores cliebnt to dest adds here
+CLIENT_TO_DEST_add = []
+1) 2-D array stores the known destination for each client
+2) Each 1-D entry in CLIENT_TO_DEST_add is a client. The index of that client corresponds to Client_add
+3) Each 1-D entry in CLIENT_TO_DEST_add[x] is a known destination for the client. The index of that destinaiton corresponds to it's index for future use
+
+#Stores node to destination adds
+NODE_TO_DEST_add = []
+1) 2-D array stores the known destinaitons for each node
+2) Each 1-D entry in NODE_TO_DEST_add is a node. The index of that node corresponds to Node_index
+3) Each 1-D entry in NODE_TO_DEST_add[x] is a known destination for the node. The index of that destination corresponds to it's index for future use
+
+#Stores node to client adds
+NODE_TO_CLIENT_add = []
+1) 2-D array stores the known clients for each node
+2) Each 1-D entry in NODE_TO_CLIENT_add is a node. The index of that node corresponds to Node_index
+3) Each 1-D entry in NODE_TO_CLIENT_add[x] is a known client for the node. The index of that client corresponds to it's index for future use
+
+#Data to be stored defined here
+#Store the loads here
+LOAD_array = []
+1) 2-D array stores the current load for every node
+2) Index of node in LOAD_array corresponds to index of node in Node_index
+3) LOAD_array[x] is the time series of the load for the corresponding node
+
+#Store amount of packets sent here
+PACKETS_sent = []
+1) 3-D array stores the current uplink for every node to neighbour
+2) Index of node in PACKETS_sent corresponds to index of node in Node_index
+3) Index in PACKETS_sent[x] corresponds to the neighbour index in NEIGH_add
+4) PACKETS_sentp[x][y] is the time series of uplink packets for the link between node and neighbour
+
+#Store amount of packets received here
+PACKETS_received = []
+1) 3-D array stores the current downlink for every node to neighbour
+2) Index of node in PACKETS_received corresponds to index of node in Node_index
+3) Index in PACKETS_received[x] corresponds to the neighbour index in NEIGH_add
+4) PACKETS_received[x][y] is the time series of donwlink packets for the link between node and neighbour
+
+#Store the average RSSI of received link rememeber it is signed
+RSSI_value = []
+1) 3-D array stores the current RSSI for every node to neighbour
+2) Index of node in RSSI_value corresponds to index of node in Node_index
+3) Index in RSSI_value[x] corresponds to the neighbour index in NEIGH_add
+4) RSSI_value[x][y] is the time series of the RSSI for the link between node and neighbour
+
+#Store the average SNR of received link rememeber this is again unsigned???? makes sure
+SNR_value = []
+1) 3-D array stores the current SNR for every node to neighbour
+2) Index of node in SNR_value corresponds to index of node in Node_index
+3) Index in SNR_value[x] corresponds to the neighbour index in NEIGH_add
+4) SNR_value[x][y] is the time series of the SNR for the link between node and neighbour
+
+#Stores the routing table next hop entries for each node for a given destination
+ROUTING_table_next = []
+1) 3-D array stores the current available next hop paths from a node to a known destination
+2) Index of node in ROUTING_table_next corresponds to index of node in Node_index
+3) Index in ROUTING_table_next[x] corresponds to the destination index in NODE_TO_DEST_add[x]
+4) ROUTING_table_next[x][y] is the array of known next hops to destination
+
+#STores the next hop for the chosen path
+ROUTING_table_path = []
+1) 3-D array stores the current chosen path from a node to a known destination
+2) Index of node in ROUTING_table_path corresponds to index of node in Node_index
+3) Index in ROUTING_table_path[x] corresponds to the destination index in NODE_TO_DEST_add[x]
+4) ROUTING_table_path[x][y] is the next hop entry
+
+#Stores the amount of messages packets received per epoch
+Dest_RX_Amount = []
+1) 3-D array stores the current RX packets from known client to a destination
+2) Index of node in Dest_RX_Amount corresponds to index of node in Dest_Add
+3) Index in Dest_RX_Amount[x] corresponds to the destination index in DEST_TO_CLIENT_add[x]
+4) Dest_RX_Amount[x][y] is the time series for the RX of packets
+
+#Stores the average PING for received messages
+Dest_PING_Amount = []
+1) 3-D array stores the current PING from known client to a destination
+2) Index of node in Dest_PING_Amount corresponds to index of node in Dest_Add
+3) Index in Dest_PING_Amount[x] corresponds to the destination index in DEST_TO_CLIENT_add[x]
+4) Dest_PING_Amount[x][y] is the time series for the PING of packets
+
+#Stores the amount of messages sent by client to destination per epoch
+Client_TX_Amount = []
+1) 3-D array stores the current TX from known client to a destination
+2) Index of node in Client_TX_Amount corresponds to index of node in CLient_Add
+3) Index in Client_TX_Amount[x] corresponds to the destination index in CLIENT_TO_DEST_add[x]
+4) Client_TX_Amount[x][y] is the time series for the TX of packets
