@@ -4,7 +4,7 @@ import serial
 from scipy.stats import norm
 import seaborn as sns
 from IPython.display import clear_output
-
+import bitstring
 
 
 
@@ -30,28 +30,47 @@ COM_PORT_NODE_3 = 'COM30'
 COM_PORT_NODE_4 = 'COM3'
 COM_PORT_NODE_DESTINATION = 'COM33'
 
-#Store the address here
-#Address index corresponds to load measurement index in LOAD_array
+#Store the addresses here
+#Address index corresponds to index of the measured node
 NODE_index = []
 
+#Store neighbour addresses here
+NEIGH_add = []
+
+#Store destination address here
+DEST_add = []
+
+#STores client addresses here
+CLIENT_add = []
+
+#Data to be stored defined here
 #Store the loads here
 LOAD_array = []
-
-#Store neighbour addresses here
-PACKETS_sent_add = []
 #Store amount of packets sent here
 PACKETS_sent = []
+#Store amount of packets received here
+PACKETS_received = []
+#Store the average RSSI of received link rememeber it is signed
+RSSI_value = []
+#Store the average SNR of received link rememeber this is again unsigned???? makes sure
+SNR_value = []
+#Stores the routing table next hop entries for each node for a given destination
+ROUTING_table_next = []
+#STores the next hop for the chosen path
+ROUTING_table_path = []
+#Stores the amount of messages packets received per epoch
+Dest_RX_Amount = []
+#Stores the average PING for received messages
+Dest_PING_Amount = []
 
 X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
 
-# Library to decode byte stream
-Start_Byte = ['S','L','P','N','R','M']
-Second_Byte = ['T','D','S','A','R','I','N']
-Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST']
+# Libraries to decode byte stream
+Start_Byte = ['S','L','P','N','R','M','T','C','D']
+Second_Byte = ['T','D','S','A','R','I','N','E','P']
+Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST','TE','CP','DA','CN']
 Stop_Byte = 13 #Line feed denotes the end of line
 Next_Line = 10 #Endl indicates next measurement
-#Library for ease of plotting
-DATATYPE_LIST = ['Load (packets/s)']
 #Denotes the n'th byte of the header we are looking for
 header = 0
 #Denotes global variable for rx data byte
@@ -60,9 +79,11 @@ rxData = 0
 current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
+#Libraries for graphing
+DATATYPE_LIST = ['Load (packets/s)']
+LINE_COLORS = [] #TODO add possible line colors
 
-def wait_for_start():
-    global ser_Test
+def wait_for_start(ser):
     global rxData
     global current_header
     global header
@@ -83,10 +104,9 @@ def wait_for_start():
             current_header+=chr(rxData)
             header = 2
         #Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
 
-def wait_for_load_value():
-    global ser_Test
+def wait_for_header(wait_byte,ser):
     global rxData
     global current_header
     global header
@@ -97,13 +117,13 @@ def wait_for_load_value():
 
 
     while current_header != 'LD':
-        print("wait_for_load_value current byte is " + chr(rxData) + " and current header is " + current_header)
+        print("Waiting for header " + wait_byte+ "current byte is " + chr(rxData) + " and current header is " + current_header)
         # Resets if header not yet found
         if (header == 2):
             current_header = ''
             header = 0
             #An error occured
-            print("LD not found wtf")
+            print(wait_byte+" not found wtf")
             exit()
         # Adds first byte
         if (chr(rxData) in Start_Byte) and (header == 0):
@@ -114,10 +134,9 @@ def wait_for_load_value():
             current_header += chr(rxData)
             header = 2
         # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
 
-def wait_for_neighbour_receive_add():
-    global ser_Test
+def wait_for_load_value(ser):
     global rxData
     global current_header
     global header
@@ -126,29 +145,28 @@ def wait_for_neighbour_receive_add():
     current_header = ''
     shift = 0
 
+    wait_for_header('LD',ser)
+    # while current_header != 'LD':
+    #     print("wait_for_load_value current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("LD not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
 
-    while current_header != 'ND':
-        print("wait_for_neighbour_receive_add current byte is " + chr(rxData) + " and current header is " + current_header)
-        # Resets if header not yet found
-        if (header == 2):
-            current_header = ''
-            header = 0
-            #An error occured
-            print("ND not found wtf")
-            exit()
-        # Adds first byte
-        if (chr(rxData) in Start_Byte) and (header == 0):
-            current_header += chr(rxData)
-            header = 1
-        # If first byte found adds second byte
-        elif (chr(rxData) in Second_Byte) and (header == 1):
-            current_header += chr(rxData)
-            header = 2
-        # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
-
-def wait_for_neighbour_sent_amount_head():
-    global ser_Test
+def wait_for_neighbour_destination_add(ser):
     global rxData
     global current_header
     global header
@@ -157,29 +175,57 @@ def wait_for_neighbour_sent_amount_head():
     current_header = ''
     shift = 0
 
+    wait_for_header('ND',ser)
+    # while current_header != 'ND':
+    #     print("wait_for_neighbour_destination_add current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("ND not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
 
-    while current_header != 'PS':
-        print("wait_for_neighbour_sent_amount_head current byte is " + chr(rxData) + " and current header is " + current_header)
-        # Resets if header not yet found
-        if (header == 2):
-            current_header = ''
-            header = 0
-            #An error occured
-            print("PS not found wtf")
-            exit()
-        # Adds first byte
-        if (chr(rxData) in Start_Byte) and (header == 0):
-            current_header += chr(rxData)
-            header = 1
-        # If first byte found adds second byte
-        elif (chr(rxData) in Second_Byte) and (header == 1):
-            current_header += chr(rxData)
-            header = 2
-        # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+def wait_for_neighbour_source_add(ser):
+    global rxData
+    global current_header
+    global header
 
-def wait_for_next():
-    global ser_Test
+    load = 0
+    current_header = ''
+    shift = 0
+    wait_for_header('NS',ser)
+    # while current_header != 'NS':
+    #     print("wait_for_neighbour_source_add current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("NS not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
+
+def wait_for_neighbour_sent_amount_head(ser):
     global rxData
     global current_header
     global header
@@ -188,29 +234,88 @@ def wait_for_next():
     current_header = ''
     shift = 0
 
+    wait_for_header('PS',ser)
+    # while current_header != 'PS':
+    #     print("wait_for_neighbour_sent_amount_head current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("PS not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
 
-    while current_header != 'RA':
-        print("wait_for_next current byte is " + chr(rxData) + " and current header is " + current_header)
-        # Resets if header not yet found
-        if (header == 2):
-            current_header = ''
-            header = 0
-            #An error occured
-            print("RA not found wtf")
-            exit()
-        # Adds first byte
-        if (chr(rxData) in Start_Byte) and (header == 0):
-            current_header += chr(rxData)
-            header = 1
-        # If first byte found adds second byte
-        elif (chr(rxData) in Second_Byte) and (header == 1):
-            current_header += chr(rxData)
-            header = 2
-        # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+def wait_for_neighbour_receive_amount_head(ser):
+    global rxData
+    global current_header
+    global header
 
-def wait_for_stop():
-    global ser_Test
+    load = 0
+    current_header = ''
+    shift = 0
+
+    wait_for_header('PR',ser)
+    # while current_header != 'PR':
+    #     print("wait_for_neighbour_receive_amount_head current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("PR not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
+
+def wait_for_next(ser):
+    global rxData
+    global current_header
+    global header
+
+    load = 0
+    current_header = ''
+    shift = 0
+
+    wait_for_header('RA',ser)
+    # while current_header != 'RA':
+    #     print("wait_for_next current byte is " + chr(rxData) + " and current header is " + current_header)
+    #     # Resets if header not yet found
+    #     if (header == 2):
+    #         current_header = ''
+    #         header = 0
+    #         #An error occured
+    #         print("RA not found wtf")
+    #         exit()
+    #     # Adds first byte
+    #     if (chr(rxData) in Start_Byte) and (header == 0):
+    #         current_header += chr(rxData)
+    #         header = 1
+    #     # If first byte found adds second byte
+    #     elif (chr(rxData) in Second_Byte) and (header == 1):
+    #         current_header += chr(rxData)
+    #         header = 2
+    #     # Reads next byte
+    #     rxData = int.from_bytes(ser_Test.read(1), "big")
+
+def wait_for_stop(ser):
     global rxData
     global current_header
     global header
@@ -220,11 +325,10 @@ def wait_for_stop():
 
     while (rxData!=Next_Line):
         # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
 
 
-def read_load_data():
-    global ser_Test
+def read_load_data(ser):
     global rxData
     global current_header
     global header
@@ -237,14 +341,13 @@ def read_load_data():
         #Adds the measurement to the variable
         load = load<<8 | rxData
         # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
     while (rxData!=Next_Line):
         # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
     return load
 
-def read_packet_sent_data():
-    global ser_Test
+def read_in_measurement(ser):
     global rxData
     global current_header
     global header
@@ -253,22 +356,40 @@ def read_packet_sent_data():
     current_header = ''
 
     while (rxData != Stop_Byte) and (chr(rxData) != 'R'):
-        print("read_packet_sent_data current byte is " + str(rxData))
+        print("read_in_measurement current byte is " + str(rxData))
         #Adds the measurement to the variable
         sent = sent<<8 | rxData
         # Reads next byte
-        rxData = int.from_bytes(ser_Test.read(1), "big")
-
+        rxData = int.from_bytes(ser.read(1), "big")
     return sent
 
-def read_in_packet_sent_data():
-    global ser_Test
+def read_in_RSSI(ser):
+    global rxData
+    global current_header
+    global header
+    #We make a unique one since this needs to be signed
+    sent = 0
+    current_header = ''
+    loop = 0
+
+    while (rxData != Stop_Byte) and (chr(rxData) != 'R'):
+        print("read_in_measurement current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        sent = sent<<8 | rxData
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        loop+=1
+    #Convert from unsigned to signed
+    sent = bitstring.BitArray(uint = sent, length=loop*8).int
+    return sent
+
+def read_in_packet_sent_data(ser):
     global rxData
     global current_header
     global header
 
     #We do this until an end line is obtained
-    rxData = int.from_bytes(ser_Test.read(1), "big")
+    rxData = int.from_bytes(ser.read(1), "big")
     while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
         # First reset trackers
         header = 0
@@ -277,38 +398,38 @@ def read_in_packet_sent_data():
         if rxData not in NODE_index:
             NODE_index.append(rxData)
         #Create the first entry into neighbour list if none exhists
-        if len(PACKETS_sent_add)==0:
+        if len(NEIGH_add)==0:
             holder=[]
-            PACKETS_sent_add.append(holder)
+            NEIGH_add.append(holder)
         #Obtain the index of the node
         Address_Index = NODE_index.index(rxData)
         #Now wait for the queue to start obtaining the niehgbour address
-        rxData = int.from_bytes(ser_Test.read(1), "big")
-        wait_for_neighbour_receive_add()
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_neighbour_destination_add(ser)
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the address
         neighbour_add = rxData
-        # if neighbour_add not in PACKETS_sent_add[Address_Index]:
-        #     PACKETS_sent_add[Address_Index].append(neighbour_add)
-        if len(PACKETS_sent_add) == Address_Index:
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NEIGH_add) == Address_Index:
             holder = [neighbour_add]
-            PACKETS_sent_add.append(holder)
+            NEIGH_add.append(holder)
         else:
-            if neighbour_add not in PACKETS_sent_add[Address_Index]:
-                PACKETS_sent_add[Address_Index].append(neighbour_add)
+            if neighbour_add not in NEIGH_add[Address_Index]:
+                NEIGH_add[Address_Index].append(neighbour_add)
 
-        Address_Index_Neigh = PACKETS_sent_add[Address_Index].index(neighbour_add)
+        Address_Index_Neigh = NEIGH_add[Address_Index].index(neighbour_add)
         #Now obtain the packet sent list , first wait for header
-        rxData = int.from_bytes(ser_Test.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big")
         # Clear header trackers
         header = 0
         current_header = ''
-        wait_for_neighbour_sent_amount_head()
+        wait_for_neighbour_sent_amount_head(ser)
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
         current_header = ''
-        packets_sent = read_packet_sent_data()
+        packets_sent = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
         if len(PACKETS_sent)==Address_Index:
@@ -322,24 +443,380 @@ def read_in_packet_sent_data():
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next()
+            wait_for_next(ser)
         else:
-            wait_for_stop()
+            wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
 
-def rx_Read_Test():
-    global ser_Test
+def read_in_packet_received_data(ser):
     global rxData
     global current_header
     global header
-    global loops
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        #Create the first entry into neighbour list if none exhists
+        if len(NEIGH_add)==0:
+            holder=[]
+            NEIGH_add.append(holder)
+        #Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        #Now wait for the queue to start obtaining the niehgbour address
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_neighbour_source_add(ser)
+        #Remember last read byte is not looked at by while loop
+        #Thus that is the start of the address
+        neighbour_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NEIGH_add) == Address_Index:
+            holder = [neighbour_add]
+            NEIGH_add.append(holder)
+        else:
+            if neighbour_add not in NEIGH_add[Address_Index]:
+                NEIGH_add[Address_Index].append(neighbour_add)
+
+        Address_Index_Neigh = NEIGH_add[Address_Index].index(neighbour_add)
+        #Now obtain the packet sent list , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        wait_for_neighbour_receive_amount_head(ser)
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        packets_received = read_in_measurement(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        if len(PACKETS_received)==Address_Index:
+            holder=[]
+            PACKETS_received.append(holder)
+        if len(PACKETS_received[Address_Index])==Address_Index_Neigh:
+            holder=[]
+            PACKETS_received[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        PACKETS_received[Address_Index][Address_Index_Neigh].append(packets_received)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            wait_for_next(ser)
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+
+def read_in_RSSI(ser):
+    global rxData
+    global current_header
+    global header
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        #Create the first entry into neighbour list if none exhists
+        if len(NEIGH_add)==0:
+            holder=[]
+            NEIGH_add.append(holder)
+        #Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        #Now wait for the queue to start obtaining the niehgbour address
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_neighbour_source_add(ser)
+        #Remember last read byte is not looked at by while loop
+        #Thus that is the start of the address
+        neighbour_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NEIGH_add) == Address_Index:
+            holder = [neighbour_add]
+            NEIGH_add.append(holder)
+        else:
+            if neighbour_add not in NEIGH_add[Address_Index]:
+                NEIGH_add[Address_Index].append(neighbour_add)
+
+        Address_Index_Neigh = NEIGH_add[Address_Index].index(neighbour_add)
+        #Now obtain the packet sent list , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        #Now wait for the RSSI start header
+        wait_for_header('RI',ser)
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        RSSI_result = read_in_RSSI(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        if len(RSSI_value)==Address_Index:
+            holder=[]
+            RSSI_value.append(holder)
+        if len(RSSI_value[Address_Index])==Address_Index_Neigh:
+            holder=[]
+            RSSI_value[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        RSSI_value[Address_Index][Address_Index_Neigh].append(RSSI_result)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            wait_for_next(ser)
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+
+def read_in_SNR(ser):
+    global rxData
+    global current_header
+    global header
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        #Create the first entry into neighbour list if none exhists
+        if len(NEIGH_add)==0:
+            holder=[]
+            NEIGH_add.append(holder)
+        #Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        #Now wait for the queue to start obtaining the niehgbour address
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_neighbour_source_add(ser)
+        #Remember last read byte is not looked at by while loop
+        #Thus that is the start of the address
+        neighbour_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NEIGH_add) == Address_Index:
+            holder = [neighbour_add]
+            NEIGH_add.append(holder)
+        else:
+            if neighbour_add not in NEIGH_add[Address_Index]:
+                NEIGH_add[Address_Index].append(neighbour_add)
+
+        Address_Index_Neigh = NEIGH_add[Address_Index].index(neighbour_add)
+        #Now obtain the packet sent list , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        #Now wait for the SNR start header
+        wait_for_header('SN',ser)
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        SNR_result = read_in_measurement(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        if len(SNR_value)==Address_Index:
+            holder=[]
+            SNR_value.append(holder)
+        if len(SNR_value[Address_Index])==Address_Index_Neigh:
+            holder=[]
+            SNR_value[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        SNR_value[Address_Index][Address_Index_Neigh].append(SNR_result)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            wait_for_next(ser)
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+
+def read_in_ROUTING_TABLE(ser):
+    global rxData
+    global current_header
+    global header
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    #We can do this outside as this measurement only repeats the TE entries
+
+    # First reset trackers
+    header = 0
+    current_header = ''
+    # First measurement is address
+    if rxData not in NODE_index:
+        NODE_index.append(rxData)
+    # Create the first entry into dest list if none exhists
+    if len(DEST_add) == 0:
+        holder = []
+        DEST_add.append(holder)
+    # Create first enrty into chosen path list if none echists
+    if len(ROUTING_table_path) == 0:
+        holder = []
+        ROUTING_table_path.append(holder)
+
+    # Obtain the index of the node
+    Address_Index = NODE_index.index(rxData)
+    # Now wait for the queue to start obtaining the destination address
+    rxData = int.from_bytes(ser.read(1), "big")
+    wait_for_header('DA', ser)
+    # Remember last read byte is not looked at by while loop
+    # Thus that is the start of the address
+    destination_add = rxData
+    # if neighbour_add not in NEIGH_add[Address_Index]:
+    #     NEIGH_add[Address_Index].append(neighbour_add)
+    if len(DEST_add) == Address_Index:
+        holder = [destination_add]
+        DEST_add.append(holder)
+    else:
+        if destination_add not in DEST_add[Address_Index]:
+            DEST_add[Address_Index].append(destination_add)
+
+    Address_Index_Dest = DEST_add[Address_Index].index(destination_add)
+    # Now obtain the chosen path , first wait for header
+    rxData = int.from_bytes(ser.read(1), "big")
+    # Clear header trackers
+    header = 0
+    current_header = ''
+    # Now wait for the SNR start header
+    wait_for_header('CP', ser)
+    # Remember last read byte is not looked at by while loop
+    # Thus that is the start of the chosen path
+    chosen_path_add = rxData
+    if len(ROUTING_table_path) == Address_Index:
+        holder = [chosen_path_add]
+        ROUTING_table_path.append(holder)
+    else:
+        if chosen_path_add not in ROUTING_table_path[Address_Index]:
+            ROUTING_table_path[Address_Index].append(chosen_path_add)
+
+    # Now obtain the next hop values
+    rxData = int.from_bytes(ser.read(1), "big")
+    # Clear header trackers
+    header = 0
+    current_header = ''
+    # Now wait for the table enrty start header
+    wait_for_header('TE', ser)
+
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        NEXT_HOP = read_in_measurement(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        if len(ROUTING_table_next)==Address_Index:
+            holder=[]
+            ROUTING_table_next.append(holder)
+        if len(ROUTING_table_next[Address_Index])==Address_Index_Dest:
+            holder=[]
+            ROUTING_table_next[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        if NEXT_HOP not in ROUTING_table_next[Address_Index][Address_Index_Dest]:
+            ROUTING_table_next[Address_Index][Address_Index_Dest].append(NEXT_HOP)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            wait_for_next(ser)
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+
+
+def read_in_AMOUNT_RECEIVED_DEST(ser):
+    global rxData
+    global current_header
+    global header
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        #Create the first entry into neighbour list if none exhists
+        if len(NEIGH_add)==0:
+            holder=[]
+            NEIGH_add.append(holder)
+        #Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        #Now wait for the queue to start obtaining the niehgbour address
+        rxData = int.from_bytes(ser.read(1), "big")
+        wait_for_neighbour_source_add(ser)
+        #Remember last read byte is not looked at by while loop
+        #Thus that is the start of the address
+        neighbour_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        if len(NEIGH_add) == Address_Index:
+            holder = [neighbour_add]
+            NEIGH_add.append(holder)
+        else:
+            if neighbour_add not in NEIGH_add[Address_Index]:
+                NEIGH_add[Address_Index].append(neighbour_add)
+
+        Address_Index_Neigh = NEIGH_add[Address_Index].index(neighbour_add)
+        #Now obtain the packet sent list , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        #Now wait for the SNR start header
+        wait_for_header('SN',ser)
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        SNR_result = read_in_measurement(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        if len(SNR_value)==Address_Index:
+            holder=[]
+            SNR_value.append(holder)
+        if len(SNR_value[Address_Index])==Address_Index_Neigh:
+            holder=[]
+            SNR_value[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        SNR_value[Address_Index][Address_Index_Neigh].append(SNR_result)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            wait_for_next(ser)
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+
+
+#Reads in standard routing node data
+def rx_Read_Node(ser,loops):
+    global rxData
+    global current_header
+    global header
     #Clear header trackers
     header = 0
     current_header = ''
     #Start measurements
-    rxData =  int.from_bytes(ser_Test.read(1), "big")
+    rxData =  int.from_bytes(ser.read(1), "big")
     #First Obtains the start of the measurements
-    wait_for_start()
+    wait_for_start(ser)
     #Clear header trackers
     header = 0
     current_header = ''
@@ -351,11 +828,11 @@ def rx_Read_Test():
     #Obtain the index of the address
     Address_Index = NODE_index.index(rxData)
     #Read in First header value to denote start of load
-    rxData = int.from_bytes(ser_Test.read(1), "big")
-    wait_for_load_value()
+    rxData = int.from_bytes(ser.read(1), "big")
+    wait_for_load_value(ser)
     #Remember while loop read in last rx data
     #Now wait for end line and read in the load data
-    load = read_load_data()
+    load = read_load_data(ser)
     if len(LOAD_array)==Address_Index:
         holder = [load]
         LOAD_array.append(holder)
@@ -370,25 +847,199 @@ def rx_Read_Test():
     print("-------------------------------------")
     #Now starts reading in the sent data
     #Read in Packet Sent Data (this is the current address)
-    read_in_packet_sent_data()
+    read_in_packet_sent_data(ser)
 
     #End of the packet sent data
     print("-----Current List Of Neighbours-----------")
-    print(PACKETS_sent_add)
+    print(NEIGH_add)
     print("-------------------------------------")
     print("-----Current List Of Sent Packets-----------")
     print(PACKETS_sent)
     print("-------------------------------------")
-    #Increase loops
-    loops+=1
+
+    #Now starts reading in the received data
+    read_in_packet_received_data(ser)
+    #End of the packet received data
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of Received Packets-----------")
+    print(PACKETS_received)
+    print("-------------------------------------")
+
+    #Now starts reading in the RSSI values
+    read_in_RSSI(ser)
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of RSSI values-----------")
+    print(RSSI_value)
+    print("-------------------------------------")
+
+    #Now starts reading in the SNR values
+    read_in_SNR(ser)
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of SNR values-----------")
+    print(SNR_value)
+    print("-------------------------------------")
+
+    #Read the routing table entries
+    read_in_ROUTING_TABLE(ser)
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known destinations for known nodes-----------")
+    print(DEST_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to destination-----------")
+    print(ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to destination-----------")
+    print(ROUTING_table_next)
+    print("-------------------------------------")
+
+
     #Now we check if everything has been filled in correctly for the arrays
     for i in range(0,len(PACKETS_sent)):
         for j in range(0,len(PACKETS_sent[i])):
-            if len(PACKETS_sent[i][j])<loops:
+            while len(PACKETS_sent[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_sent[i][j].append(0)
+    for i in range(0,len(PACKETS_received)):
+        for j in range(0,len(PACKETS_received[i])):
+            while len(PACKETS_received[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                PACKETS_received[i][j].append(0)
+    for i in range(0,len(RSSI_value)):
+        for j in range(0,len(RSSI_value[i])):
+            while len(RSSI_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                RSSI_value[i][j].append(0)
+    for i in range(0,len(SNR_value)):
+        for j in range(0,len(SNR_value[i])):
+            while len(SNR_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                SNR_value[i][j].append(0)
+
+#Reads in standard destination node data
+def rx_Read_Dest(ser,loops):
+    global rxData
+    global current_header
+    global header
+    #Clear header trackers
+    header = 0
+    current_header = ''
+    #Start measurements
+    rxData =  int.from_bytes(ser.read(1), "big")
+    #First Obtains the start of the measurements
+    wait_for_start(ser)
+    #Clear header trackers
+    header = 0
+    current_header = ''
+    #The start has been obtained measurements will now commence
+    #Remember for loop already read the next byte after the header
+    #First measurement is address
+    if rxData not in NODE_index:
+        NODE_index.append(rxData)
+    #Obtain the index of the address
+    Address_Index = NODE_index.index(rxData)
+    #Read in First header value to denote start of load
+    rxData = int.from_bytes(ser.read(1), "big")
+    wait_for_load_value(ser)
+    #Remember while loop read in last rx data
+    #Now wait for end line and read in the load data
+    load = read_load_data(ser)
+    if len(LOAD_array)==Address_Index:
+        holder = [load]
+        LOAD_array.append(holder)
+    else:
+        LOAD_array[Address_Index].append(load)
+    #This case the last read in byte was '\n' so we end here for now
+    print("-----Current Index Of Nodes---------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current Load Of Nodes-----------")
+    print(LOAD_array)
+    print("-------------------------------------")
+    #Now starts reading in the sent data
+    #Read in Packet Sent Data (this is the current address)
+    read_in_packet_sent_data(ser)
+
+    #End of the packet sent data
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of Sent Packets-----------")
+    print(PACKETS_sent)
+    print("-------------------------------------")
+
+    #Now starts reading in the received data
+    read_in_packet_received_data(ser)
+    #End of the packet received data
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of Received Packets-----------")
+    print(PACKETS_received)
+    print("-------------------------------------")
+
+    #Now starts reading in the RSSI values
+    read_in_RSSI(ser)
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of RSSI values-----------")
+    print(RSSI_value)
+    print("-------------------------------------")
+
+    #Now starts reading in the SNR values
+    read_in_SNR(ser)
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of SNR values-----------")
+    print(SNR_value)
+    print("-------------------------------------")
+
+    #Read the routing table entries
+    read_in_ROUTING_TABLE(ser)
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known destinations for known nodes-----------")
+    print(DEST_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to destination-----------")
+    print(ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to destination-----------")
+    print(ROUTING_table_next)
+    print("-------------------------------------")
 
 
+    #Now we check if everything has been filled in correctly for the arrays
+    for i in range(0,len(PACKETS_sent)):
+        for j in range(0,len(PACKETS_sent[i])):
+            while len(PACKETS_sent[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                PACKETS_sent[i][j].append(0)
+    for i in range(0,len(PACKETS_received)):
+        for j in range(0,len(PACKETS_received[i])):
+            while len(PACKETS_received[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                PACKETS_received[i][j].append(0)
+    for i in range(0,len(RSSI_value)):
+        for j in range(0,len(RSSI_value[i])):
+            while len(RSSI_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                RSSI_value[i][j].append(0)
+    for i in range(0,len(SNR_value)):
+        for j in range(0,len(SNR_value[i])):
+            while len(SNR_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                SNR_value[i][j].append(0)
 
 
 
@@ -415,7 +1066,7 @@ if __name__ == "__main__":
 
         lines = []
         for i in range(NUM_SAMPLES):
-            rx_Read_Test()
+            rx_Read_Node(ser)
             # remove old lines
             # for line in lines:
             #     if len(line) > 0:
@@ -445,10 +1096,9 @@ if __name__ == "__main__":
             print("Could not connect to the device "+COM_PORT_TEST+".")
             exit()
         header = 0
-        loops = 0
         #Merely samples the serial at these intervals
         for i in range(NUM_SAMPLES):
-            rx_Read_Test()
+            rx_Read_Node(ser_Test,i)
             plt.pause(1/SAMPLING_FREQ)
 
     # print(RNG_array)

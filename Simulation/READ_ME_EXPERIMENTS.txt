@@ -30,6 +30,12 @@ Packet format routing node:
 This is calculated  by appending time sent to the message packet and subtracting time sent from the received time.
 Ping is given in terms of the current clock cycles since start time. CLOCKS_PER_SEC   = 100 
 'MS' denotes the next measurement is amount of messages sent.
+'TE' denotes that a table entry of a path has been observed
+'CP' CP denotes that the next hop following is the chosen path
+'DA' DA denotes that the destination address is following
+'CN' CN denotes that the client node data follows
+
+
 '\n' the endline denotes the ending of a set of measurements.
 Always start next set of measurements with the current node's address.
 
@@ -40,19 +46,20 @@ Always start next set of measurements with the current node's address.
 2) ['Routing node address','N','D','Neighbour destination','P','S','Amount of Packets sent','R','A'........,'\n'],
 3) ['Routing node address','N','S','Neighbour source','P','R','Amount of Packets received','R','A'........,'\n'],
 4) Gets calculated by using the data of 2 and 3 per link.
-5) ['Routing node address','R','I','RSSI measurement','N','S','Neighbour source','R','A'........,'\n'],
-6) ['Routing node address','S','N','SNR measurement','N','S','Neighbour source','R','A'........,'\n']
+5) ['Routing node address','N','S','Neighbour source','R','I','RSSI measurement','R','A'........,'\n'],
+6) ['Routing node address','N','S','Neighbour source','S','N','SNR measurement','R','A'........,'\n'],
+7) ['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
 ----------------------------------------------------------------------------------------------------
 Following are additional parameters to be sent by destination node.
-7) ['Destination node address','M','R','Amount of messages received','P','I','Ping','\n']
-8) Is calculated by using the data from 7 for both the source and destination
-9) Is calculated by using 7's Ping reading
+8) ['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
+9) Is calculated by using the data from 8 for both the source and destination
+10) Is calculated by using 9's Ping reading
 
 Following are addtional parameters sent by the source node.
-7) ['Source node address','M','S','Amount of messages sent','\n']
-8) Is calculated by using the data from 7 for both the source and destination
+8) ['Source node address','M','S','Amount of messages sent','\n']
+9) Is calculated by using the data from 8 for both the source and destination 
 
-For the simulator the data is stores as follows:
+For the simulator the data is stored as follows:
 
 NODE_index keeps track of the index of the nodes in their corresponding measurement arrays
 
