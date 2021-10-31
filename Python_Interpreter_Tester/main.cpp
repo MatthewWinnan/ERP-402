@@ -5,7 +5,7 @@
 int main()
 {
     pc.baud(9600);
-    bool is_client = false;
+    bool is_client = true;
     bool is_dst = true;
     while (true) {
         ThisThread::sleep_for(2s);
@@ -40,7 +40,8 @@ int main()
         {
             reading_2 = RNG.getByte();
         }
-        std::cout<<my_address<<"ND"<<neighbour_address_1<<"PS"<<reading_1<<"RA"<<my_address<<"ND"<<neighbour_address_2<<"PS"<<reading_2<<endl;
+        std::cout<<my_address<<"ND"<<neighbour_address_1<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"ND"<<my_address<<"PS"<<reading_2<<endl;
         //Sending third type of packet
         //['Routing node address','N','S','Neighbour source','P','R','Amount of Packets received','R','A'........,'\n'],
                 //Ensure that readings don't equal 0,endl or line feed
@@ -54,7 +55,8 @@ int main()
         {
             reading_2 = RNG.getByte();
         }
-        std::cout<<my_address<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA"<<my_address<<"NS"<<neighbour_address_2<<"PR"<<reading_2<<endl;
+        std::cout<<my_address<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<my_address<<"PR"<<reading_2<<endl;
         //Sending fourth type of packet
         //['Routing node address','N','S','Neighbour source','R','I','RSSI measurement','R','A'........,'\n']
                 //Ensure that readings don't equal 0,endl or line feed
@@ -101,10 +103,10 @@ int main()
             }
             //Sending 7'th packet type for client
             //['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
-            std::cout<<my_address<<"DA"<<destination_add_1<<"MS"<<reading_1<<"RA";
-            std::cout<<my_address<<"DA"<<destination_add_2<<"MS"<<reading_2<<endl;           
+            std::cout<<my_address<<"DA"<<destination_add_1<<"MS"<<reading_1<<endl;
+            // std::cout<<my_address<<"DA"<<destination_add_2<<"MS"<<reading_2<<endl;           
         }
-        else if (is_dst)
+        if (is_dst)
         {
             ping_reading_1 = 0;
             ping_reading_2 = 0;
@@ -128,8 +130,8 @@ int main()
             }
             //Sending 7'th destination node specific packet
             //['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
-            std::cout<<my_address<<"CN"<<destination_add_1<<"MR"<<reading_1<<"PI"<<ping_reading_1<<"RA";
-            std::cout<<my_address<<"CN"<<destination_add_2<<"MR"<<reading_2<<"PI"<<ping_reading_1<<endl; 
+            std::cout<<destination_add_1<<"CN"<<my_address<<"MR"<<reading_1<<"PI"<<ping_reading_2<<endl;
+            //std::cout<<my_address<<"CN"<<destination_add_2<<"MR"<<reading_2<<"PI"<<ping_reading_1<<endl; 
         }
 
     }
