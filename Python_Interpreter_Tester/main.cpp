@@ -5,7 +5,8 @@
 int main()
 {
     pc.baud(9600);
-
+    bool is_client = false;
+    bool is_dst = true;
     while (true) {
         ThisThread::sleep_for(2s);
         uint8_t reading = 0;
@@ -16,10 +17,12 @@ int main()
         uint8_t neighbour_address_3 = 140;
         uint8_t reading_1 = 0;
         uint8_t reading_2 = 0;
+        uint8_t ping_reading_1 = 0;
+        uint8_t ping_reading_2 = 0;
         uint8_t destination_add_1 = 200;
         uint8_t destination_add_2 = 220;
         //Sending first type of packet
-        while((reading!=0) && (reading!=13) && (reading!=10))
+        while((reading==0) || (reading==13) || (reading==10))
         {
             reading = RNG.getByte();
         }
@@ -29,11 +32,11 @@ int main()
         //Ensure that readings don't equal 0,endl or line feed
         reading_1 = 0;
         reading_2 = 0;
-        while((reading_1!=0) && (reading_1!=13) && (reading_1!=10))
+        while((reading_1==0) || (reading_1==13) || (reading_1==10))
         {
             reading_1 = RNG.getByte();
         }
-        while((reading_2!=0) && (reading_2!=13) && (reading_2!=10))
+        while((reading_2==0) || (reading_2==13) || (reading_2==10))
         {
             reading_2 = RNG.getByte();
         }
@@ -43,11 +46,11 @@ int main()
                 //Ensure that readings don't equal 0,endl or line feed
         reading_1 = 0;
         reading_2 = 0;
-        while((reading_1!=0) && (reading_1!=13) && (reading_1!=10))
+        while((reading_1==0) || (reading_1==13) || (reading_1==10))
         {
             reading_1 = RNG.getByte();
         }
-        while((reading_2!=0) && (reading_2!=13) && (reading_2!=10))
+        while((reading_2==0) || (reading_2==13) || (reading_2==10))
         {
             reading_2 = RNG.getByte();
         }
@@ -57,11 +60,11 @@ int main()
                 //Ensure that readings don't equal 0,endl or line feed
         reading_1 = 0;
         reading_2 = 0;
-        while((reading_1!=0) && (reading_1!=13) && (reading_1!=10))
+        while((reading_1==0) || (reading_1==13) || (reading_1==10))
         {
             reading_1 = RNG.getByte();
         }
-        while((reading_2!=0) && (reading_2!=13) && (reading_2!=10))
+        while((reading_2==0) || (reading_2==13) || (reading_2==10))
         {
             reading_2 = RNG.getByte();
         }
@@ -70,11 +73,11 @@ int main()
         //['Routing node address','N','S','Neighbour source','S','N','SNR measurement','R','A'........,'\n'],
         reading_1 = 0;
         reading_2 = 0;
-        while((reading_1!=0) && (reading_1!=13) && (reading_1!=10))
+        while((reading_1==0) || (reading_1==13) || (reading_1==10))
         {
             reading_1 = RNG.getByte();
         }
-        while((reading_2!=0) && (reading_2!=13) && (reading_2!=10))
+        while((reading_2==0) || (reading_2==13) || (reading_2==10))
         {
             reading_2 = RNG.getByte();
         }
@@ -83,6 +86,51 @@ int main()
         //['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
         std::cout<<my_address<<"DA"<<destination_add_1<<"CP"<<neighbour_address_2<<"TE"<<neighbour_address_1<<"RA";
         std::cout<<my_address<<"DA"<<destination_add_1<<"CP"<<neighbour_address_2<<"TE"<<neighbour_address_3<<endl;
+        //Sending additional node specific data
+        if (is_client)
+        {
+            reading_1 = 0;
+            reading_2 = 0;
+            while((reading_1==0) || (reading_1==13) || (reading_1==10))
+            {
+                reading_1 = RNG.getByte();
+            }
+            while((reading_2==0) || (reading_2==13) || (reading_2==10))
+            {
+                reading_2 = RNG.getByte();
+            }
+            //Sending 7'th packet type for client
+            //['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
+            std::cout<<my_address<<"DA"<<destination_add_1<<"MS"<<reading_1<<"RA";
+            std::cout<<my_address<<"DA"<<destination_add_2<<"MS"<<reading_2<<endl;           
+        }
+        else if (is_dst)
+        {
+            ping_reading_1 = 0;
+            ping_reading_2 = 0;
+            reading_1 = 0;
+            reading_2 = 0;
+            while((reading_1==0) || (reading_1==13) || (reading_1==10))
+            {
+                reading_1 = RNG.getByte();
+            }
+            while((reading_2==0) || (reading_2==13) || (reading_2==10))
+            {
+                reading_2 = RNG.getByte();
+            }
+            while((ping_reading_1==0) || (ping_reading_1==13) || (ping_reading_1==10))
+            {
+                ping_reading_1 = RNG.getByte();
+            }
+            while((ping_reading_2==0) || (ping_reading_2==13) || (ping_reading_2==10))
+            {
+                ping_reading_2 = RNG.getByte();
+            }
+            //Sending 7'th destination node specific packet
+            //['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
+            std::cout<<my_address<<"CN"<<destination_add_1<<"MR"<<reading_1<<"PI"<<ping_reading_1<<"RA";
+            std::cout<<my_address<<"CN"<<destination_add_2<<"MR"<<reading_2<<"PI"<<ping_reading_1<<endl; 
+        }
 
     }
 }
