@@ -35,7 +35,7 @@ current_test = 0
 # Define the test strings
 test_array = ["Case_1"]
 #Measurements taken
-measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node"]
+measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node","_throughput_per_dest","_ping_per_dest","_mdr_per_dest"]
 
 #Store the addresses here
 #Address index corresponds to index of the measured node
@@ -105,8 +105,10 @@ current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
 #Libraries for graphing
-DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link']
+DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link','RSSI for link (dB)','SNR for link (dB)','Throughput (packets/s)','Packet Delay (ms)','Message Delivery Ratio']
 LINE_COLORS = ['b','g','r','c','m','y','k','w']
+#Defining clock per second for microcontroller
+CLOCKS_PER_SEC = 100
 
 def wait_for_start(ser):
     global rxData
@@ -1365,7 +1367,179 @@ def rx_Read_Client(ser,loops):
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Client_TX_Amount[i][j].append(0)
 
+#Reads in standard client node data
+def rx_Read_TESTING(ser,loops):
+    global rxData
+    global current_header
+    global header
+    #Clear header trackers
+    header = 0
+    current_header = ''
+    #Start measurements
+    rxData =  int.from_bytes(ser.read(1), "big")
+    #First Obtains the start of the measurements
+    wait_for_start(ser)
+    #Clear header trackers
+    header = 0
+    current_header = ''
+    #The start has been obtained measurements will now commence
+    #Remember for loop already read the next byte after the header
+    #First measurement is address
+    if rxData not in NODE_index:
+        NODE_index.append(rxData)
+    #Obtain the index of the address
+    Address_Index = NODE_index.index(rxData)
+    #Read in First header value to denote start of load
+    rxData = int.from_bytes(ser.read(1), "big")
+    wait_for_load_value(ser)
+    #Remember while loop read in last rx data
+    #Now wait for end line and read in the load data
+    load = read_load_data(ser)
+    if len(LOAD_array)==Address_Index:
+        holder = [load]
+        LOAD_array.append(holder)
+    else:
+        LOAD_array[Address_Index].append(load)
+    #This case the last read in byte was '\n' so we end here for now
+    print("######## PRINTING LOAD MEASUREMENTS #############")
+    print("-----Current Index Of Nodes---------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current Load Of Nodes-----------")
+    print(LOAD_array)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Now starts reading in the sent data
+    #Read in Packet Sent Data (this is the current address)
+    read_in_packet_sent_data(ser)
+    print("######## PRINTING PACKET SENT MEASUREMENTS #############")
+    #End of the packet sent data
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of Sent Packets-----------")
+    print(PACKETS_sent)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Now starts reading in the received data
+    read_in_packet_received_data(ser)
+    #End of the packet received data
+    print("######## PRINTING PACKET RECEIVED MEASUREMENTS #############")
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of Received Packets-----------")
+    print(PACKETS_received)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Now starts reading in the RSSI values
+    read_in_RSSI(ser)
+    print("######## PRINTING RSSI MEASUREMENTS #############")
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of RSSI values-----------")
+    print(RSSI_value)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Now starts reading in the SNR values
+    read_in_SNR(ser)
+    print("######## PRINTING SNR MEASUREMENTS #############")
+    print("-----Current List Of Neighbours-----------")
+    print(NEIGH_add)
+    print("-------------------------------------")
+    print("-----Current List Of SNR values-----------")
+    print(SNR_value)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Read the routing table entries
+    read_in_ROUTING_TABLE(ser)
+    print("######## PRINTING ROUTING TABLE MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known destinations for known nodes-----------")
+    print(DEST_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to destination-----------")
+    print(ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to destination-----------")
+    print(ROUTING_table_next)
+    print("-------------------------------------")
+    print("###########################################################")
+    # Read in the message sdent data
+    read_in_AMOUNT_SENT_CLIENT(ser)
+    print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List Clients-----------")
+    print(CLIENT_add)
+    print("-------------------------------------")
+    print("-----Current List known destinations for clients-----------")
+    print(CLIENT_TO_DEST_add)
+    print("-------------------------------------")
+    print("-----Message rate for clients-----------")
+    print(Client_TX_Amount)
+    print("-------------------------------------")
+    print("###########################################################")
+    #Read in the message received data
+    read_in_AMOUNT_RECEIVED_DEST(ser)
+    print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List Destinations-----------")
+    print(DEST_add)
+    print("-------------------------------------")
+    print("-----Current List known clients for destinations-----------")
+    print(DEST_TO_CLIENT_add)
+    print("-------------------------------------")
+    print("-----PING for clients-----------")
+    print(Dest_PING_Amount)
+    print("-------------------------------------")
+    print("-----Throughput clients-----------")
+    print(Dest_RX_Amount)
+    print("-------------------------------------")
+    print("###########################################################")
 
+    #Now we check if everything has been filled in correctly for the arrays
+    for i in range(0,len(PACKETS_sent)):
+        for j in range(0,len(PACKETS_sent[i])):
+            while len(PACKETS_sent[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                PACKETS_sent[i][j].append(0)
+    for i in range(0,len(PACKETS_received)):
+        for j in range(0,len(PACKETS_received[i])):
+            while len(PACKETS_received[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                PACKETS_received[i][j].append(0)
+    for i in range(0,len(RSSI_value)):
+        for j in range(0,len(RSSI_value[i])):
+            while len(RSSI_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                RSSI_value[i][j].append(0)
+    for i in range(0,len(SNR_value)):
+        for j in range(0,len(SNR_value[i])):
+            while len(SNR_value[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                SNR_value[i][j].append(0)
+    for i in range(0,len(Client_TX_Amount)):
+        for j in range(0,len(Client_TX_Amount[i])):
+            while len(Client_TX_Amount[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                Client_TX_Amount[i][j].append(0)
+    for i in range(0,len(Dest_PING_Amount)):
+        for j in range(0,len(Dest_PING_Amount[i])):
+            while len(Dest_PING_Amount[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                Dest_PING_Amount[i][j].append(0)
+    for i in range(0,len(Dest_RX_Amount)):
+        for j in range(0,len(Dest_RX_Amount[i])):
+            while len(Dest_RX_Amount[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                Dest_RX_Amount[i][j].append(0)
 
 if __name__ == "__main__":
     if live:
@@ -1420,10 +1594,11 @@ if __name__ == "__main__":
         header = 0
         #Merely samples the serial at these intervals
         for i in range(NUM_SAMPLES):
-            rx_Read_Dest(ser_Test,i)
+            rx_Read_TESTING(ser_Test,i)
             plt.pause(1/SAMPLING_FREQ)
         print("########### Starting Plotting Data ###########")
         #Print the load data
+        print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
         plt.ylabel(DATATYPE_LIST[0])
         plt.xlabel("Time (s)")
         # fig.tight_layout()
@@ -1440,6 +1615,7 @@ if __name__ == "__main__":
         plt.show()
         plt.close()
         #Print the load data
+        print("########### Plotting " + DATATYPE_LIST[1] + " ###########")
         #Now plotting the PDR data
         for i in range(0,len(PACKETS_received)):
             plt.ylabel(DATATYPE_LIST[1])
@@ -1463,7 +1639,10 @@ if __name__ == "__main__":
                     # Obtain index of the current node in the neighbour's neighbour index
                     my_index = NEIGH_add[node_index].index(NODE_index[i])
                     #As such the corresponding data received was sent by node_index to my_index
-                    PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    if (PACKETS_sent[node_index][my_index][k]!=0):
+                        PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    else:
+                        PDR_data.append(0)
                     #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
                 plt.plot(X_axis, PDR_data, LINE_COLORS[j])
                 holder.append(PDR_data)
@@ -1472,6 +1651,7 @@ if __name__ == "__main__":
             plt.savefig(test_array[current_test] + measurement_array[1] + "_for_node_"+str(NODE_index[i])+".pdf")
             plt.show()
             plt.close()
+        print("########### Plotting " + DATATYPE_LIST[2] + " ###########")
         #Now plotting the ETX data
         for i in range(0,len(PACKETS_received)):
             plt.ylabel(DATATYPE_LIST[2])
@@ -1496,12 +1676,138 @@ if __name__ == "__main__":
                     my_index = NEIGH_add[node_index].index(NODE_index[i])
                     #As such the corresponding data received was sent by node_index to my_index
                     #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
-                    CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                    if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
+                        CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                    else:
+                        CETX_data.append(0)
                 plt.plot(X_axis, CETX_data, LINE_COLORS[j])
                 holder.append(CETX_data)
             NODE_ETX_value.append(holder)
             plt.legend(legend)
             plt.savefig(test_array[current_test] + measurement_array[2] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+
+        print("########### Plotting " + DATATYPE_LIST[3] + " ###########")
+        #Now plotting the RSSI data
+        for i in range(0,len(RSSI_value)):
+            plt.ylabel(DATATYPE_LIST[3])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            for j in range(0,len(RSSI_value[i])):
+                neigh_add = NEIGH_add[i][j]
+                #Define the RSSI holder
+                RSSI_holder = []
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(RSSI_value[i][j])):
+                    RSSI_holder.append(RSSI_value[i][j][k])
+                plt.plot(X_axis, RSSI_holder, LINE_COLORS[j])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[3] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+
+        print("########### Plotting " + DATATYPE_LIST[4] + " ###########")
+        #Now plotting the SNR data
+        for i in range(0,len(SNR_value)):
+            plt.ylabel(DATATYPE_LIST[4])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            for j in range(0,len(SNR_value[i])):
+                neigh_add = NEIGH_add[i][j]
+                #Define the RSSI holder
+                SNR_holder = []
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(SNR_value[i][j])):
+                    SNR_holder.append(SNR_value[i][j][k])
+                plt.plot(X_axis, SNR_holder, LINE_COLORS[j])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[4] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+
+        print("########### Plotting " + DATATYPE_LIST[5] + " ###########")
+        #Now plotting the Throughput data
+        for i in range(0,len(Dest_RX_Amount)):
+            plt.ylabel(DATATYPE_LIST[5])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            for j in range(0,len(Dest_RX_Amount[i])):
+                client_add = DEST_TO_CLIENT_add[i][j]
+                #Define the RX holder
+                RX_holder = []
+                legend.append("Client " + str(client_add))
+                for k in range(0,len(Dest_RX_Amount[i][j])):
+                    RX_holder.append(Dest_RX_Amount[i][j][k])
+                plt.plot(X_axis, RX_holder, LINE_COLORS[j])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[5] + "_for_destination_"+str(DEST_add[i])+".pdf")
+            plt.show()
+            plt.close()
+
+        print("########### Plotting " + DATATYPE_LIST[6] + " ###########")
+        #Now plotting the PING data
+        for i in range(0,len(Dest_PING_Amount)):
+            plt.ylabel(DATATYPE_LIST[6])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            for j in range(0,len(Dest_PING_Amount[i])):
+                client_add = DEST_TO_CLIENT_add[i][j]
+                #Define the ping holder
+                PING_holder = []
+                legend.append("Client " + str(client_add))
+                for k in range(0,len(Dest_PING_Amount[i][j])):
+                    PING_holder.append(Dest_PING_Amount[i][j][k]/CLOCKS_PER_SEC*1000)
+                plt.plot(X_axis, PING_holder, LINE_COLORS[j])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[6] + "_for_destination_"+str(DEST_add[i])+".pdf")
+            plt.show()
+            plt.close()
+
+        print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
+        #Now plotting the MDR data
+        for i in range(0,len(Client_TX_Amount)):
+            plt.ylabel(DATATYPE_LIST[7])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            for j in range(0,len(Client_TX_Amount[i])):
+                dest_add = CLIENT_TO_DEST_add[i][j]
+                #Define the mdr holder
+                MDR_holder = []
+                legend.append("Client " + str(client_add))
+                for k in range(0,len(Client_TX_Amount[i][j])):
+                    #Obtain index of the current client the measurements were received from
+                    dest_index = DEST_add.index(dest_add)
+                    # Obtain index of the current destination in the client's destination index
+                    my_index = DEST_TO_CLIENT_add[dest_index].index(CLIENT_add[i])
+                    #As such the corresponding data received was received by dest_index from my_index
+                    if (Client_TX_Amount[i][j][k]!=0):
+                        MDR_holder.append(Dest_RX_Amount[dest_index][my_index][k]/Client_TX_Amount[i][j][k])
+                    else:
+                        MDR_holder.append(0)
+                plt.plot(X_axis, MDR_holder, LINE_COLORS[j])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
             plt.show()
             plt.close()
 
