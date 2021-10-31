@@ -19,7 +19,7 @@ live = False
 BYTE_ORDER = 'big'  # or 'big'
 SAMPLING_FREQ = 0.2  # Hz (every 5 sec)
 SAMPLING_TIME = 60 # Time to sample in seconds
-NUM_SAMPLES = SAMPLING_TIME/(1/SAMPLING_FREQ)  # 1 minute
+NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
 BAUD_RATE = 9600
 
 #PORTS for specific devices
@@ -77,7 +77,6 @@ Dest_RX_Amount = []
 Dest_PING_Amount = []
 #Stores the amount of messages sent by client to destination per epoch
 Client_TX_Amount = []
-
 X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
 
 # Libraries to decode byte stream
@@ -131,8 +130,8 @@ def wait_for_header(wait_byte,ser):
     shift = 0
 
 
-    while current_header != 'LD':
-        print("Waiting for header " + wait_byte+ "current byte is " + chr(rxData) + " and current header is " + current_header)
+    while current_header != wait_byte:
+        print("Waiting for header " + wait_byte+ " current byte is " + chr(rxData) + " and current header is " + current_header)
         # Resets if header not yet found
         if (header == 2):
             current_header = ''
@@ -380,7 +379,7 @@ def read_in_measurement(ser):
 
 
 
-def read_in_RSSI(ser):
+def measure_RSSI(ser):
     global rxData
     global current_header
     global header
@@ -595,7 +594,7 @@ def read_in_RSSI(ser):
         # Clear header trackers
         header = 0
         current_header = ''
-        RSSI_result = read_in_RSSI(ser)
+        RSSI_result = measure_RSSI(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
         if len(RSSI_value)==Address_Index:
@@ -699,10 +698,6 @@ def read_in_ROUTING_TABLE(ser):
         if len(NODE_TO_DEST_add) == 0:
             holder = []
             NODE_TO_DEST_add.append(holder)
-        # Create first enrty into chosen path list if none echists
-        if len(ROUTING_table_path) == 0:
-            holder = []
-            ROUTING_table_path.append(holder)
 
         # Obtain the index of the node
         Address_Index = NODE_index.index(rxData)
@@ -733,11 +728,13 @@ def read_in_ROUTING_TABLE(ser):
         # Thus that is the start of the chosen path
         chosen_path_add = rxData
         if len(ROUTING_table_path) == Address_Index:
-            holder = [chosen_path_add]
+            holder = []
             ROUTING_table_path.append(holder)
-        else:
-            if chosen_path_add not in ROUTING_table_path[Address_Index]:
-                ROUTING_table_path[Address_Index] = chosen_path_add
+        if len(ROUTING_table_path[Address_Index]) == Address_Index_Dest:
+            holder = []
+            ROUTING_table_path[Address_Index].append(holder)
+        if chosen_path_add != ROUTING_table_path[Address_Index][Address_Index_Dest]:
+            ROUTING_table_path[Address_Index][Address_Index_Dest] = chosen_path_add
 
         # Now obtain the next hop values
         rxData = int.from_bytes(ser.read(1), "big")
@@ -918,7 +915,7 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
         if len(Client_TX_Amount)==Client_Address_Index:
             holder=[]
             Client_TX_Amount.append(holder)
-        if len(Dest_RX_Amount[Client_Address_Index])==Address_Index_Destination:
+        if len(Client_TX_Amount[Client_Address_Index])==Address_Index_Destination:
             holder=[]
             Client_TX_Amount[Client_Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -1412,7 +1409,7 @@ if __name__ == "__main__":
         header = 0
         #Merely samples the serial at these intervals
         for i in range(NUM_SAMPLES):
-            rx_Read_Node(ser_Test,i)
+            rx_Read_Dest(ser_Test,i)
             plt.pause(1/SAMPLING_FREQ)
 
     # print(RNG_array)
