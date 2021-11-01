@@ -11,16 +11,13 @@ int main()
         ThisThread::sleep_for(2s);
         uint8_t reading = 0;
         uint8_t my_address = 100;
-        uint8_t my_address_2 = 160;
-        uint8_t neighbour_address_1 = 120;
-        uint8_t neighbour_address_2 = 130;
-        uint8_t neighbour_address_3 = 140;
+        uint8_t neighbour_address_1 = 110;
+        uint8_t neighbour_address_2 = 120;
         uint8_t reading_1 = 0;
         uint8_t reading_2 = 0;
         uint8_t ping_reading_1 = 0;
         uint8_t ping_reading_2 = 0;
-        uint8_t destination_add_1 = 200;
-        uint8_t destination_add_2 = 220;
+        uint8_t destination_add_1 = 130;
         //Sending first type of packet
         while((reading==0) || (reading==13) || (reading==10))
         {
@@ -41,7 +38,17 @@ int main()
             reading_2 = RNG.getByte();
         }
         std::cout<<my_address<<"ND"<<neighbour_address_1<<"PS"<<reading_1<<"RA";
-        std::cout<<neighbour_address_1<<"ND"<<my_address<<"PS"<<reading_2<<endl;
+        std::cout<<my_address<<"ND"<<neighbour_address_2<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"ND"<<my_address<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"ND"<<my_address<<"PS"<<reading_1<<"RA";
+
+        std::cout<<destination_add_1<<"ND"<<neighbour_address_1<<"PS"<<reading_1<<"RA";
+        std::cout<<destination_add_1<<"ND"<<neighbour_address_2<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"ND"<<destination_add_1<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"ND"<<destination_add_1<<"PS"<<reading_1<<"RA";
+
+        std::cout<<neighbour_address_2<<"ND"<<neighbour_address_1<<"PS"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"ND"<<neighbour_address_2<<"PS"<<reading_2<<endl;
         //Sending third type of packet
         //['Routing node address','N','S','Neighbour source','P','R','Amount of Packets received','R','A'........,'\n'],
                 //Ensure that readings don't equal 0,endl or line feed
@@ -55,8 +62,21 @@ int main()
         {
             reading_2 = RNG.getByte();
         }
+        //std::cout<<my_address<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA";
+        //std::cout<<neighbour_address_1<<"NS"<<my_address<<"PR"<<reading_2<<endl;
         std::cout<<my_address<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA";
-        std::cout<<neighbour_address_1<<"NS"<<my_address<<"PR"<<reading_2<<endl;
+        std::cout<<my_address<<"NS"<<neighbour_address_2<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<my_address<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<my_address<<"PR"<<reading_1<<"RA";
+
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA";
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_2<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<destination_add_1<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<destination_add_1<<"PR"<<reading_1<<"RA";
+
+        std::cout<<neighbour_address_2<<"NS"<<neighbour_address_1<<"PR"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<neighbour_address_2<<"PR"<<reading_2<<endl;
+
         //Sending fourth type of packet
         //['Routing node address','N','S','Neighbour source','R','I','RSSI measurement','R','A'........,'\n']
                 //Ensure that readings don't equal 0,endl or line feed
@@ -70,7 +90,20 @@ int main()
         {
             reading_2 = RNG.getByte();
         }
-        std::cout<<my_address<<"NS"<<neighbour_address_1<<"RI"<<reading_1<<"RA"<<my_address<<"NS"<<neighbour_address_2<<"RI"<<reading_2<<endl;
+        //std::cout<<my_address<<"NS"<<neighbour_address_1<<"RI"<<reading_1<<"RA"<<my_address<<"NS"<<neighbour_address_2<<"RI"<<reading_2<<endl;
+                std::cout<<my_address<<"NS"<<neighbour_address_1<<"RI"<<reading_1<<"RA";
+        std::cout<<my_address<<"NS"<<neighbour_address_2<<"RI"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<my_address<<"RI"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<my_address<<"RI"<<reading_1<<"RA";
+
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_1<<"RI"<<reading_1<<"RA";
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_2<<"RI"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<destination_add_1<<"RI"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<destination_add_1<<"RI"<<reading_1<<"RA";
+
+        std::cout<<neighbour_address_2<<"NS"<<neighbour_address_1<<"RI"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<neighbour_address_2<<"RI"<<reading_2<<endl;
+
         //Sending fifth type of packet 
         //['Routing node address','N','S','Neighbour source','S','N','SNR measurement','R','A'........,'\n'],
         reading_1 = 0;
@@ -83,11 +116,28 @@ int main()
         {
             reading_2 = RNG.getByte();
         }
-        std::cout<<my_address<<"NS"<<neighbour_address_1<<"SN"<<reading_1<<"RA"<<my_address<<"NS"<<neighbour_address_2<<"SN"<<reading_2<<endl;
+       // std::cout<<my_address<<"NS"<<neighbour_address_1<<"SN"<<reading_1<<"RA"<<my_address<<"NS"<<neighbour_address_2<<"SN"<<reading_2<<endl;
+        std::cout<<my_address<<"NS"<<neighbour_address_1<<"SN"<<reading_1<<"RA";
+        std::cout<<my_address<<"NS"<<neighbour_address_2<<"SN"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<my_address<<"SN"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<my_address<<"SN"<<reading_1<<"RA";
+
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_1<<"SN"<<reading_1<<"RA";
+        std::cout<<destination_add_1<<"NS"<<neighbour_address_2<<"SN"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<destination_add_1<<"SN"<<reading_1<<"RA";
+        std::cout<<neighbour_address_2<<"NS"<<destination_add_1<<"SN"<<reading_1<<"RA";
+
+        std::cout<<neighbour_address_2<<"NS"<<neighbour_address_1<<"SN"<<reading_1<<"RA";
+        std::cout<<neighbour_address_1<<"NS"<<neighbour_address_2<<"SN"<<reading_2<<endl;
+
+
         //Sending sixth type of packet
         //['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
-        std::cout<<my_address<<"DA"<<destination_add_1<<"CP"<<neighbour_address_2<<"TE"<<neighbour_address_1<<"RA";
-        std::cout<<my_address<<"DA"<<destination_add_1<<"CP"<<neighbour_address_2<<"TE"<<neighbour_address_3<<endl;
+        std::cout<<my_address<<"DA"<<destination_add_1<<"CP"<<neighbour_address_2<<"TE"<<neighbour_address_2<<"RA";
+        std::cout<<neighbour_address_2<<"DA"<<destination_add_1<<"CP"<<destination_add_1<<"TE"<<destination_add_1<<"RA";
+        std::cout<<neighbour_address_1<<"DA"<<destination_add_1<<"CP"<<destination_add_1<<"TE"<<destination_add_1<<"RA";
+        std::cout<<destination_add_1<<"DA"<<destination_add_1<<"CP"<<destination_add_1<<"TE"<<destination_add_1<<endl;
+
         //Sending additional node specific data
         if (is_client)
         {

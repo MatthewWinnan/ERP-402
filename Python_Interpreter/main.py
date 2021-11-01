@@ -12,8 +12,8 @@ import networkx as nx
 np.set_printoptions(precision=4, linewidth=170, edgeitems=10, floatmode='fixed', sign=' ')
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams.update({'font.size': 13})
-live = True
-show_network_graph = True
+live = False
+show_network_graph = False
 
 #Setting COM options
 #General COM parameters
@@ -997,10 +997,7 @@ def Update_Graph():
             b_flag = False  # This flag says was the edge a path to the destination
             for k in range(0, len(DEST_add)):
                 # We need to check if this edge is a path to the destination
-                print(NEIGH_add[i][j])
-                print(ROUTING_table_next[i][k])
                 if (NEIGH_add[i][j] in ROUTING_table_next[i][k]):
-                    print("huh")
                     # It is a path
                     b_flag = True
                     if (NEIGH_add[i][j] == ROUTING_table_path[i][k]):
