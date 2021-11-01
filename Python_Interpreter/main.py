@@ -5,12 +5,15 @@ from scipy.stats import norm
 import seaborn as sns
 from IPython.display import clear_output
 import bitstring
+import networkx as nx
+
 
 #Setting Print Options For The Terminal
 np.set_printoptions(precision=4, linewidth=170, edgeitems=10, floatmode='fixed', sign=' ')
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams.update({'font.size': 13})
-live = False
+live = True
+show_network_graph = True
 
 #Setting COM options
 #General COM parameters
@@ -1543,26 +1546,27 @@ def rx_Read_TESTING(ser,loops):
 
 if __name__ == "__main__":
     if live:
+        print("##### TODO LIVE PLOTS #########")
         #For live plots during demo?????
-        plt.figure(figsize=(6.5, 7.2))
-        plt.ylabel("Testing\n" + DATATYPE_LIST[0] + "\n")
-        plt.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
-
-        plt.xlabel("Time (s)")
-        # fig.tight_layout()
-        plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
-        plt.grid(True)
-        try:
-            # Setup the serial
-            ser = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_TEST + ".")
-        except:
-            print("Could not connect to the device "+COM_PORT_TEST+".")
-            exit()
-
-        lines = []
-        for i in range(NUM_SAMPLES):
-            rx_Read_Node(ser)
+        # plt.figure(figsize=(6.5, 7.2))
+        # plt.ylabel("Testing\n" + DATATYPE_LIST[0] + "\n")
+        # plt.tick_params(labelcolor='w', top=False, bottom=False, left=False, right=False)
+        #
+        # plt.xlabel("Time (s)")
+        # # fig.tight_layout()
+        # plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+        # plt.grid(True)
+        # try:
+        #     # Setup the serial
+        #     ser = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+        #     print("Connected to " + COM_PORT_TEST + ".")
+        # except:
+        #     print("Could not connect to the device "+COM_PORT_TEST+".")
+        #     exit()
+        #
+        # lines = []
+        # for i in range(NUM_SAMPLES):
+        #     rx_Read_Node(ser)
             # remove old lines
             # for line in lines:
             #     if len(line) > 0:
@@ -1582,8 +1586,8 @@ if __name__ == "__main__":
             #     if j == 2:
             #         plt.legend(loc='upper right')
             # plt.grid(True)
-            plt.pause(0.33)
-    else:
+            # plt.pause(0.33)
+    elif not live:
         try:
             # Setup the serial
             ser_Test = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
@@ -1810,6 +1814,24 @@ if __name__ == "__main__":
             plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
             plt.show()
             plt.close()
+
+    if show_network_graph:
+        G = nx.DiGraph()
+        G.add_node("a")
+        G.add_nodes_from(["b", "c"])
+        G.add_weighted_edges_from([(1, 2, 3.0)])
+        edge = ("d", "e")
+        G.add_edge(*edge,color='red',weight = 1)
+        edge = ("a", "b")
+        G.add_edge(*edge)
+        G.add_edges_from([("a", "c"), ("c", "a"), ("c", "d"), ("a", 1), (1, "d"), ("a", 2)])
+        pos = nx.circular_layout(G)
+        labels = nx.get_edge_attributes(G, 'weight')
+        print(labels)
+        nx.draw_networkx(G,pos,with_labels=True, font_weight='bold',node_color=['r', 'r', 'r', 'b', 'b', 'r', 'r'],edge_color=['r', 'r', 'r', 'b', 'b', 'r', 'r','b'])
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=labels)
+        plt.show()  # display
+
 
 
 
