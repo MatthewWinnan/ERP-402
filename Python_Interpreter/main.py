@@ -134,6 +134,12 @@ Node_Size = [600,900,1200]
 # 2 = valid path to destination/origin
 # 3 = chosen path to destination
 Edge_Size = [1,2,3]
+#Defining the shapes of the nodes
+# "v" = clients
+# "^" = destination
+# "o" = routing nodes
+Node_Shape = ['v','^','o']
+
 
 def wait_for_start(ser):
     global rxData
@@ -968,6 +974,60 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
 
+def Update_Graph():
+    # Initialize Graph
+    G = nx.DiGraph()
+    # Initialize legend array
+    legend = []
+    for i in range(0, len(NODE_index)):
+        if (NODE_index[i] in CLIENT_add):
+            # Adding Client nodes
+            G.add_node(NODE_index[i], color=Node_Color[0], size=Node_Size[1], shape=Node_Shape[0])
+            legend.append("Client Node " + str(NODE_index[i]))
+        elif (NODE_index[i] in DEST_add):
+            # Adding Dest nodes
+            G.add_node(NODE_index[i], color=Node_Color[1], size=Node_Size[2], shape=Node_Shape[1])
+            legend.append("Destination Node " + str(NODE_index[i]))
+        else:
+            # Adding routing nodes
+            G.add_node(NODE_index[i], color=Node_Color[2], size=Node_Size[0], shape=Node_Shape[2])
+            legend.append("Routing Node " + str(NODE_index[i]))
+        for j in range(0, len(NEIGH_add[i])):
+            # Adding edges
+            b_flag = False  # This flag says was the edge a path to the destination
+            for k in range(0, len(DEST_add)):
+                # We need to check if this edge is a path to the destination
+                print(NEIGH_add[i][j])
+                print(ROUTING_table_next[i][k])
+                if (NEIGH_add[i][j] in ROUTING_table_next[i][k]):
+                    print("huh")
+                    # It is a path
+                    b_flag = True
+                    if (NEIGH_add[i][j] == ROUTING_table_path[i][k]):
+                        # Now check if it is the chosen path if it is treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
+                    else:
+                        # Only an available path thus treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width=Edge_Size[1])
+            if (not b_flag):
+                # The edge is not a path as such treat according
+                G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
+    return G
+
+def Display_Graph (G):
+    # Now graph it
+    pos = nx.spring_layout(G)
+    labels_edge = nx.get_edge_attributes(G, 'color')
+    colors_edge = nx.get_edge_attributes(G, 'color').values()
+    width_edge = nx.get_edge_attributes(G, 'width').values()
+    colors_node = nx.get_node_attributes(G, 'color').values()
+    size_nodes = list(nx.get_node_attributes(G, 'size').values())
+    shapes_nodes = list(nx.get_node_attributes(G, 'shape').values())
+    nx.draw_networkx(G, pos, with_labels=True, font_weight='bold', node_color=colors_node, node_size=size_nodes,
+                     node_shape='D', edge_color=colors_edge, width=list(width_edge))
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels_edge)
+    plt.savefig(test_array[current_test] + "_result_network.pdf")
+    plt.show()  # display
 
 #Reads in standard routing node data
 def rx_Read_Node(ser,loops):
@@ -1837,6 +1897,13 @@ if __name__ == "__main__":
             plt.show()
             plt.close()
 
+        print("###### Plotting Visualization Of Network ###############")
+        Network = nx.DiGraph()
+        G = Update_Graph()
+        Network.update(G)
+        Display_Graph(Network)
+
+
     if show_network_graph:
         #Test data to create suggested graph
         NODE_index = [100, 110, 120, 130]
@@ -1845,54 +1912,10 @@ if __name__ == "__main__":
         NEIGH_add = [[110, 120], [100, 120, 130], [100, 110, 130], [110, 120]]
         ROUTING_table_next = [[[120]], [[130]], [[130]], [[130]]]
         ROUTING_table_path = [[120], [130], [130], [130]]
-        #Initialize Graph
-        G = nx.DiGraph()
-        #Initialize node color array
-        node_color_array = []
-        #Initialize edge color array
-        edge_color_array = []
-
-        for i in range(0,len(NODE_index)):
-            if (NODE_index[i] in CLIENT_add):
-                # Adding Client nodes
-                G.add_node(NODE_index[i], color=Node_Color[0], size = Node_Size[1] )
-            elif (NODE_index[i] in DEST_add):
-                # Adding Dest nodes
-                G.add_node(NODE_index[i],color = Node_Color[1], size = Node_Size[2])
-            else:
-                #Adding routing nodes
-                G.add_node(NODE_index[i], color=Node_Color[2], size = Node_Size[0])
-            for j in range(0,len(NEIGH_add[i])):
-                #Adding edges
-                b_flag = False #This flag says was the edge a path to the destination
-                for k in range(0,len(DEST_add)):
-                    #We need to check if this edge is a path to the destination
-                    print(NEIGH_add[i][j])
-                    print(ROUTING_table_next[i][k])
-                    if (NEIGH_add[i][j] in ROUTING_table_next[i][k]):
-                        print("huh")
-                        #It is a path
-                        b_flag = True
-                        if (NEIGH_add[i][j] == ROUTING_table_path[i][k]):
-                            #Now check if it is the chosen path if it is treat according
-                            G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width = Edge_Size[2])
-                        else:
-                            #Only an available path thus treat according
-                            G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width = Edge_Size[1])
-                if (not b_flag):
-                    #The edge is not a path as such treat according
-                    G.add_edge(NODE_index[i],NEIGH_add[i][j],color = Edge_Color[0], width = Edge_Size[0])
-        #Now graph it
-        pos = nx.spring_layout(G)
-        labels_edge = nx.get_edge_attributes(G, 'color')
-        colors_edge = nx.get_edge_attributes(G, 'color').values()
-        width_edge = nx.get_edge_attributes(G, 'width').values()
-        colors_node = nx.get_node_attributes(G, 'color').values()
-        size_nodes = list(nx.get_node_attributes(G, 'size').values())
-        nx.draw_networkx(G,pos,with_labels=True, font_weight='bold',node_color = colors_node,node_size = size_nodes, edge_color = colors_edge, width=list(width_edge))
-        # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels_edge)
-        plt.savefig(test_array[current_test]+"_result_network.pdf")
-        plt.show()  # display
+        Network = nx.DiGraph()
+        G = Update_Graph()
+        Network.update(G)
+        Display_Graph(Network)
 
 
 
