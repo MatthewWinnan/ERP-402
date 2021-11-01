@@ -753,12 +753,11 @@ def read_in_ROUTING_TABLE(ser):
         destination_add = rxData
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
-        if len(NODE_TO_DEST_add) == Address_Index:
-            holder = [destination_add]
+        while len(NODE_TO_DEST_add) <= Address_Index:
+            holder = []
             NODE_TO_DEST_add.append(holder)
-        else:
-            if destination_add not in NODE_TO_DEST_add[Address_Index]:
-                NODE_TO_DEST_add[Address_Index].append(destination_add)
+        if destination_add not in NODE_TO_DEST_add[Address_Index]:
+            NODE_TO_DEST_add[Address_Index].append(destination_add)
 
         Address_Index_Dest = NODE_TO_DEST_add[Address_Index].index(destination_add)
         # Now obtain the chosen path , first wait for header
@@ -771,10 +770,10 @@ def read_in_ROUTING_TABLE(ser):
         # Remember last read byte is not looked at by while loop
         # Thus that is the start of the chosen path
         chosen_path_add = rxData
-        if len(ROUTING_table_path) == Address_Index:
+        while len(ROUTING_table_path) <= Address_Index:
             holder = []
             ROUTING_table_path.append(holder)
-        if len(ROUTING_table_path[Address_Index]) == Address_Index_Dest:
+        while len(ROUTING_table_path[Address_Index]) <= Address_Index_Dest:
             holder = []
             ROUTING_table_path[Address_Index].append(holder)
         if chosen_path_add != ROUTING_table_path[Address_Index][Address_Index_Dest]:
@@ -794,10 +793,10 @@ def read_in_ROUTING_TABLE(ser):
         NEXT_HOP = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(ROUTING_table_next)==Address_Index:
+        while  len(ROUTING_table_next)<=Address_Index:
             holder=[]
             ROUTING_table_next.append(holder)
-        if len(ROUTING_table_next[Address_Index])==Address_Index_Dest:
+        while len(ROUTING_table_next[Address_Index])<=Address_Index_Dest:
             holder=[]
             ROUTING_table_next[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
