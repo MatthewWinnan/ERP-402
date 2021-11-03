@@ -38,7 +38,8 @@ current_test = 0
 # Define the test strings
 test_array = ["Case_1"]
 #Measurements taken
-measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node","_throughput_per_dest","_ping_per_dest","_mdr_per_dest"]
+measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node",
+                     "_throughput_per_dest","_ping_per_dest","_mdr_per_dest","_dest_route_visual","_origin_route_visual"]
 
 #Store the addresses here
 #Address index corresponds to index of the measured node
@@ -77,9 +78,13 @@ RSSI_value = []
 #Store the average SNR of received link rememeber this is again unsigned???? makes sure
 SNR_value = []
 #Stores the routing table next hop entries for each node for a given destination
-ROUTING_table_next = []
+DESTINATION_ROUTING_table_next = []
 #STores the next hop for the chosen path
-ROUTING_table_path = []
+DESTINATION_ROUTING_table_path = []
+#Stores the routing table next hop entries for each node for a given origin
+ORIGIN_ROUTING_table_next = []
+#STores the next hop for the chosen path
+ORIGIN_ROUTING_table_path = []
 #Stores the amount of messages packets received per epoch
 Dest_RX_Amount = []
 #Stores the average PING for received messages
@@ -94,9 +99,9 @@ NODE_ETX_value = []
 X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
 
 # Libraries to decode byte stream
-Start_Byte = ['S','L','P','N','R','M','T','C','D']
+Start_Byte = ['S','L','P','N','R','M','T','C','D','O']
 Second_Byte = ['T','D','S','A','R','I','N','E','P']
-Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST','TE','CP','DA','CN']
+Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST','TE','CP','DA','CN','OA']
 Stop_Byte = 13 #Line feed denotes the end of line
 Next_Line = 10 #Endl indicates next measurement
 #Denotes the n'th byte of the header we are looking for
@@ -108,7 +113,9 @@ current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
 #Libraries for graphing
-DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link','RSSI for link (dB)','SNR for link (dB)','Throughput (packets/s)','Packet Delay (ms)','Message Delivery Ratio']
+DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link',
+                 'RSSI for link (dB)','SNR for link (dB)','Throughput (packets/s)','Packet Delay (ms)',
+                 'Message Delivery Ratio','Destination Route Visualize','Origin Route Visualize']
 LINE_COLORS = ['b','g','r','c','m','y','k','w']
 #Defining clock per second for microcontroller
 CLOCKS_PER_SEC = 100
@@ -182,7 +189,7 @@ def wait_for_header(wait_byte,ser):
             header = 0
             #An error occured
             print(wait_byte+" not found wtf")
-            exit()
+            return True
         # Adds first byte
         if (chr(rxData) in Start_Byte) and (header == 0):
             current_header += chr(rxData)
@@ -193,6 +200,7 @@ def wait_for_header(wait_byte,ser):
             header = 2
         # Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
+    return False
 
 def wait_for_load_value(ser):
     global rxData
@@ -203,7 +211,7 @@ def wait_for_load_value(ser):
     current_header = ''
     shift = 0
 
-    wait_for_header('LD',ser)
+    return wait_for_header('LD',ser)
     # while current_header != 'LD':
     #     print("wait_for_load_value current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -233,7 +241,7 @@ def wait_for_neighbour_destination_add(ser):
     current_header = ''
     shift = 0
 
-    wait_for_header('ND',ser)
+    return wait_for_header('ND',ser)
     # while current_header != 'ND':
     #     print("wait_for_neighbour_destination_add current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -262,7 +270,7 @@ def wait_for_neighbour_source_add(ser):
     load = 0
     current_header = ''
     shift = 0
-    wait_for_header('NS',ser)
+    return wait_for_header('NS',ser)
     # while current_header != 'NS':
     #     print("wait_for_neighbour_source_add current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -292,7 +300,7 @@ def wait_for_neighbour_sent_amount_head(ser):
     current_header = ''
     shift = 0
 
-    wait_for_header('PS',ser)
+    return wait_for_header('PS',ser)
     # while current_header != 'PS':
     #     print("wait_for_neighbour_sent_amount_head current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -322,7 +330,7 @@ def wait_for_neighbour_receive_amount_head(ser):
     current_header = ''
     shift = 0
 
-    wait_for_header('PR',ser)
+    return wait_for_header('PR',ser)
     # while current_header != 'PR':
     #     print("wait_for_neighbour_receive_amount_head current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -352,7 +360,7 @@ def wait_for_next(ser):
     current_header = ''
     shift = 0
 
-    wait_for_header('RA',ser)
+    return wait_for_header('RA',ser)
     # while current_header != 'RA':
     #     print("wait_for_next current byte is " + chr(rxData) + " and current header is " + current_header)
     #     # Resets if header not yet found
@@ -483,12 +491,18 @@ def read_in_packet_sent_data(ser):
         Address_Index = NODE_index.index(rxData)
         #Now wait for the queue to start obtaining the niehgbour address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_neighbour_destination_add(ser)
+        if (wait_for_neighbour_destination_add(ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the address
         neighbour_add = rxData
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
+        #First fill up potential missed entries and leave to be filled up eventually
+        while len(NEIGH_add) < Address_Index:
+            holder = []
+            NEIGH_add.append(holder)
         if len(NEIGH_add) == Address_Index:
             holder = [neighbour_add]
             NEIGH_add.append(holder)
@@ -502,7 +516,9 @@ def read_in_packet_sent_data(ser):
         # Clear header trackers
         header = 0
         current_header = ''
-        wait_for_neighbour_sent_amount_head(ser)
+        if(wait_for_neighbour_sent_amount_head(ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -510,10 +526,10 @@ def read_in_packet_sent_data(ser):
         packets_sent = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(PACKETS_sent)==Address_Index:
+        while len(PACKETS_sent)<=Address_Index:
             holder=[]
             PACKETS_sent.append(holder)
-        if len(PACKETS_sent[Address_Index])==Address_Index_Neigh:
+        while len(PACKETS_sent[Address_Index])<=Address_Index_Neigh:
             holder=[]
             PACKETS_sent[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -521,10 +537,13 @@ def read_in_packet_sent_data(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
 def read_in_packet_received_data(ser):
     global rxData
@@ -548,7 +567,9 @@ def read_in_packet_received_data(ser):
         Address_Index = NODE_index.index(rxData)
         #Now wait for the queue to start obtaining the niehgbour address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_neighbour_source_add(ser)
+        if(wait_for_neighbour_source_add(ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the address
         neighbour_add = rxData
@@ -567,7 +588,9 @@ def read_in_packet_received_data(ser):
         # Clear header trackers
         header = 0
         current_header = ''
-        wait_for_neighbour_receive_amount_head(ser)
+        if(wait_for_neighbour_receive_amount_head(ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -575,10 +598,10 @@ def read_in_packet_received_data(ser):
         packets_received = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(PACKETS_received)==Address_Index:
+        while len(PACKETS_received)<=Address_Index:
             holder=[]
             PACKETS_received.append(holder)
-        if len(PACKETS_received[Address_Index])==Address_Index_Neigh:
+        while len(PACKETS_received[Address_Index])<=Address_Index_Neigh:
             holder=[]
             PACKETS_received[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -586,10 +609,13 @@ def read_in_packet_received_data(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
 def read_in_RSSI(ser):
     global rxData
@@ -613,12 +639,17 @@ def read_in_RSSI(ser):
         Address_Index = NODE_index.index(rxData)
         #Now wait for the queue to start obtaining the niehgbour address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_neighbour_source_add(ser)
+        if(wait_for_neighbour_source_add(ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the address
         neighbour_add = rxData
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
+        while len(NEIGH_add) < Address_Index:
+            holder = []
+            NEIGH_add.append(holder)
         if len(NEIGH_add) == Address_Index:
             holder = [neighbour_add]
             NEIGH_add.append(holder)
@@ -633,7 +664,9 @@ def read_in_RSSI(ser):
         header = 0
         current_header = ''
         #Now wait for the RSSI start header
-        wait_for_header('RI',ser)
+        if(wait_for_header('RI',ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -641,10 +674,10 @@ def read_in_RSSI(ser):
         RSSI_result = measure_RSSI(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(RSSI_value)==Address_Index:
+        while len(RSSI_value)<=Address_Index:
             holder=[]
             RSSI_value.append(holder)
-        if len(RSSI_value[Address_Index])==Address_Index_Neigh:
+        while len(RSSI_value[Address_Index])<=Address_Index_Neigh:
             holder=[]
             RSSI_value[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -652,10 +685,13 @@ def read_in_RSSI(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
 def read_in_SNR(ser):
     global rxData
@@ -679,12 +715,17 @@ def read_in_SNR(ser):
         Address_Index = NODE_index.index(rxData)
         #Now wait for the queue to start obtaining the niehgbour address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_neighbour_source_add(ser)
+        if(wait_for_neighbour_source_add(ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the address
         neighbour_add = rxData
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
+        while len(NEIGH_add) < Address_Index:
+            holder = []
+            NEIGH_add.append(holder)
         if len(NEIGH_add) == Address_Index:
             holder = [neighbour_add]
             NEIGH_add.append(holder)
@@ -699,7 +740,9 @@ def read_in_SNR(ser):
         header = 0
         current_header = ''
         #Now wait for the SNR start header
-        wait_for_header('SN',ser)
+        if(wait_for_header('SN',ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -707,10 +750,10 @@ def read_in_SNR(ser):
         SNR_result = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(SNR_value)==Address_Index:
+        while len(SNR_value)<=Address_Index:
             holder=[]
             SNR_value.append(holder)
-        if len(SNR_value[Address_Index])==Address_Index_Neigh:
+        while len(SNR_value[Address_Index])<=Address_Index_Neigh:
             holder=[]
             SNR_value[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -718,12 +761,15 @@ def read_in_SNR(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
-def read_in_ROUTING_TABLE(ser):
+def read_in_DESTINATION_ROUTING_TABLE(ser):
     global rxData
     global current_header
     global header
@@ -747,7 +793,9 @@ def read_in_ROUTING_TABLE(ser):
         Address_Index = NODE_index.index(rxData)
         # Now wait for the queue to start obtaining the destination address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_header('DA', ser)
+        if(wait_for_header('DA', ser)):
+            #This means that an error occured return with an error
+            return True
         # Remember last read byte is not looked at by while loop
         # Thus that is the start of the address
         destination_add = rxData
@@ -766,18 +814,20 @@ def read_in_ROUTING_TABLE(ser):
         header = 0
         current_header = ''
         # Now wait for the SNR start header
-        wait_for_header('CP', ser)
+        if(wait_for_header('CP', ser)):
+            #This means that an error occured return with an error
+            return True
         # Remember last read byte is not looked at by while loop
         # Thus that is the start of the chosen path
         chosen_path_add = rxData
-        while len(ROUTING_table_path) <= Address_Index:
+        while len(DESTINATION_ROUTING_table_path) <= Address_Index:
             holder = []
-            ROUTING_table_path.append(holder)
-        while len(ROUTING_table_path[Address_Index]) <= Address_Index_Dest:
+            DESTINATION_ROUTING_table_path.append(holder)
+        while len(DESTINATION_ROUTING_table_path[Address_Index]) <= Address_Index_Dest:
             holder = []
-            ROUTING_table_path[Address_Index].append(holder)
-        if chosen_path_add != ROUTING_table_path[Address_Index][Address_Index_Dest]:
-            ROUTING_table_path[Address_Index][Address_Index_Dest] = chosen_path_add
+            DESTINATION_ROUTING_table_path[Address_Index].append(holder)
+        if chosen_path_add != DESTINATION_ROUTING_table_path[Address_Index][Address_Index_Dest]:
+            DESTINATION_ROUTING_table_path[Address_Index][Address_Index_Dest] = chosen_path_add
 
         # Now obtain the next hop values
         rxData = int.from_bytes(ser.read(1), "big")
@@ -785,7 +835,9 @@ def read_in_ROUTING_TABLE(ser):
         header = 0
         current_header = ''
         # Now wait for the table enrty start header
-        wait_for_header('TE', ser)
+        if(wait_for_header('TE', ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -793,23 +845,122 @@ def read_in_ROUTING_TABLE(ser):
         NEXT_HOP = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        while  len(ROUTING_table_next)<=Address_Index:
+        while  len(DESTINATION_ROUTING_table_next)<=Address_Index:
             holder=[]
-            ROUTING_table_next.append(holder)
-        while len(ROUTING_table_next[Address_Index])<=Address_Index_Dest:
+            DESTINATION_ROUTING_table_next.append(holder)
+        while len(DESTINATION_ROUTING_table_next[Address_Index])<=Address_Index_Dest:
             holder=[]
-            ROUTING_table_next[Address_Index].append(holder)
+            DESTINATION_ROUTING_table_next[Address_Index].append(holder)
         #This should make sure the indexes are always full?????
-        if NEXT_HOP not in ROUTING_table_next[Address_Index][Address_Index_Dest]:
-            ROUTING_table_next[Address_Index][Address_Index_Dest].append(NEXT_HOP)
+        if NEXT_HOP not in DESTINATION_ROUTING_table_next[Address_Index][Address_Index_Dest]:
+            DESTINATION_ROUTING_table_next[Address_Index][Address_Index_Dest].append(NEXT_HOP)
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
+
+def read_in_ORIGIN_ROUTING_TABLE(ser):
+    global rxData
+    global current_header
+    global header
+
+    #We do this until an end line is obtained
+    rxData = int.from_bytes(ser.read(1), "big")
+    #We can do this outside as this measurement only repeats the TE entries
+    while (rxData!= Stop_Byte) and (rxData!=Next_Line ):
+        # First reset trackers
+        header = 0
+        current_header = ''
+        # First measurement is address
+        if rxData not in NODE_index:
+            NODE_index.append(rxData)
+        # Create the first entry into dest list if none exhists
+        if len(NODE_TO_DEST_add) == 0:
+            holder = []
+            NODE_TO_CLIENT_add.append(holder)
+
+        # Obtain the index of the node
+        Address_Index = NODE_index.index(rxData)
+        # Now wait for the queue to start obtaining the origin address
+        rxData = int.from_bytes(ser.read(1), "big")
+        if(wait_for_header('OA', ser)):
+            #This means that an error occured return with an error
+            return True
+        # Remember last read byte is not looked at by while loop
+        # Thus that is the start of the address
+        origin_add = rxData
+        # if neighbour_add not in NEIGH_add[Address_Index]:
+        #     NEIGH_add[Address_Index].append(neighbour_add)
+        while len(NODE_TO_CLIENT_add) <= Address_Index:
+            holder = []
+            NODE_TO_CLIENT_add.append(holder)
+        if origin_add not in NODE_TO_CLIENT_add[Address_Index]:
+            NODE_TO_CLIENT_add[Address_Index].append(origin_add)
+
+        Address_Index_Origin = NODE_TO_CLIENT_add[Address_Index].index(origin_add)
+        # Now obtain the chosen path , first wait for header
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        # Now wait for the SNR start header
+        if(wait_for_header('CP', ser)):
+            #This means that an error occured return with an error
+            return True
+        # Remember last read byte is not looked at by while loop
+        # Thus that is the start of the chosen path
+        chosen_path_add = rxData
+        while len(ORIGIN_ROUTING_table_path) <= Address_Index:
+            holder = []
+            ORIGIN_ROUTING_table_path.append(holder)
+        while len(ORIGIN_ROUTING_table_path[Address_Index]) <= Address_Index_Origin:
+            holder = []
+            ORIGIN_ROUTING_table_path[Address_Index].append(holder)
+        if chosen_path_add != ORIGIN_ROUTING_table_path[Address_Index][Address_Index_Origin]:
+            ORIGIN_ROUTING_table_path[Address_Index][Address_Index_Origin] = chosen_path_add
+
+        # Now obtain the next hop values
+        rxData = int.from_bytes(ser.read(1), "big")
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        # Now wait for the table enrty start header
+        if(wait_for_header('TE', ser)):
+            #This means that an error occured return with an error
+            return True
+        #Rememeber last read byte is left over. What follows is the measurements
+        # Clear header trackers
+        header = 0
+        current_header = ''
+        NEXT_HOP = read_in_measurement(ser)
+        #Last byte is either 'R' or endl.
+        #First save the new data
+        while  len(ORIGIN_ROUTING_table_next)<=Address_Index:
+            holder=[]
+            ORIGIN_ROUTING_table_next.append(holder)
+        while len(ORIGIN_ROUTING_table_next[Address_Index])<=Address_Index_Origin:
+            holder=[]
+            ORIGIN_ROUTING_table_next[Address_Index].append(holder)
+        #This should make sure the indexes are always full?????
+        if NEXT_HOP not in ORIGIN_ROUTING_table_next[Address_Index][Address_Index_Origin]:
+            ORIGIN_ROUTING_table_next[Address_Index][Address_Index_Origin].append(NEXT_HOP)
+        #AFter this check if 'R' or endl
+        if chr(rxData)=='R':
+            #wait for the next measurements
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
+        else:
+            wait_for_stop(ser)
+        #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
 def read_in_AMOUNT_RECEIVED_DEST(ser):
     global rxData
@@ -835,13 +986,18 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         Dest_Address_Index = DEST_add.index(rxData)
         #Now wait for the queue to start obtaining the client address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_header('CN',ser)
+        if(wait_for_header('CN',ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the client address
         Client_Address = rxData
 
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
+        while len(DEST_TO_CLIENT_add) < Dest_Address_Index:
+            holder = []
+            DEST_TO_CLIENT_add.append(holder)
         if len(DEST_TO_CLIENT_add) == Dest_Address_Index:
             holder = [Client_Address]
             DEST_TO_CLIENT_add.append(holder)
@@ -857,7 +1013,9 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         header = 0
         current_header = ''
         #Now wait for the RX measurements start header
-        wait_for_header('MR',ser)
+        if(wait_for_header('MR',ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -865,17 +1023,19 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         Amount_RX = read_in_AMOUNT_RX(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(Dest_RX_Amount)==Dest_Address_Index:
+        while len(Dest_RX_Amount)<=Dest_Address_Index:
             holder=[]
             Dest_RX_Amount.append(holder)
-        if len(Dest_RX_Amount[Dest_Address_Index])==Address_Index_Client:
+        while len(Dest_RX_Amount[Dest_Address_Index])<=Address_Index_Client:
             holder=[]
             Dest_RX_Amount[Dest_Address_Index].append(holder)
         #This should make sure the indexes are always full?????
         Dest_RX_Amount[Dest_Address_Index][Address_Index_Client].append(Amount_RX)
 
         #Now wait for the PING measurements start header
-        wait_for_header('PI',ser)
+        if(wait_for_header('PI',ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -883,10 +1043,10 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         Amount_PING = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(Dest_PING_Amount)==Dest_Address_Index:
+        while len(Dest_PING_Amount)<=Dest_Address_Index:
             holder=[]
             Dest_PING_Amount.append(holder)
-        if len(Dest_PING_Amount[Dest_Address_Index])==Address_Index_Client:
+        while len(Dest_PING_Amount[Dest_Address_Index])<=Address_Index_Client:
             holder=[]
             Dest_PING_Amount[Dest_Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -896,10 +1056,13 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
 def read_in_AMOUNT_SENT_CLIENT(ser):
     global rxData
@@ -925,16 +1088,23 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
         Client_Address_Index = CLIENT_add.index(rxData)
         #Now wait for the queue to start obtaining the client address
         rxData = int.from_bytes(ser.read(1), "big")
-        wait_for_header('DA',ser)
+        if(wait_for_header('DA',ser)):
+            #This means that an error occured return with an error
+            return True
         #Remember last read byte is not looked at by while loop
         #Thus that is the start of the destination address
         Destination_Address = rxData
 
         # if neighbour_add not in NEIGH_add[Address_Index]:
         #     NEIGH_add[Address_Index].append(neighbour_add)
+        while len(CLIENT_TO_DEST_add) < Client_Address_Index:
+            holder = []
+            CLIENT_TO_DEST_add.append(holder)
+
         if len(CLIENT_TO_DEST_add) == Client_Address_Index:
             holder = [Destination_Address]
             CLIENT_TO_DEST_add.append(holder)
+
         else:
             if Destination_Address not in CLIENT_TO_DEST_add[Client_Address_Index]:
                 CLIENT_TO_DEST_add[Client_Address_Index].append(Destination_Address)
@@ -947,7 +1117,9 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
         header = 0
         current_header = ''
         #Now wait for the TX measurements start header
-        wait_for_header('MS',ser)
+        if(wait_for_header('MS',ser)):
+            #This means that an error occured return with an error
+            return True
         #Rememeber last read byte is left over. What follows is the measurements
         # Clear header trackers
         header = 0
@@ -955,10 +1127,10 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
         Amount_RX = read_in_measurement(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
-        if len(Client_TX_Amount)==Client_Address_Index:
+        while len(Client_TX_Amount)<=Client_Address_Index:
             holder=[]
             Client_TX_Amount.append(holder)
-        if len(Client_TX_Amount[Client_Address_Index])==Address_Index_Destination:
+        while len(Client_TX_Amount[Client_Address_Index])<=Address_Index_Destination:
             holder=[]
             Client_TX_Amount[Client_Address_Index].append(holder)
         #This should make sure the indexes are always full?????
@@ -968,12 +1140,16 @@ def read_in_AMOUNT_SENT_CLIENT(ser):
         #AFter this check if 'R' or endl
         if chr(rxData)=='R':
             #wait for the next measurements
-            wait_for_next(ser)
+            if(wait_for_next(ser)):
+                # This means that an error occured return with an error
+                return True
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
+    return False
 
-def Update_Graph():
+def Update_Destination_Graph():
+    #Updates the visualization for the path towards a destination
     # Initialize Graph
     G = nx.DiGraph()
     # Initialize legend array
@@ -996,10 +1172,10 @@ def Update_Graph():
             b_flag = False  # This flag says was the edge a path to the destination
             for k in range(0, len(DEST_add)):
                 # We need to check if this edge is a path to the destination
-                if (NEIGH_add[i][j] in ROUTING_table_next[i][k]):
+                if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_next[i][k]):
                     # It is a path
                     b_flag = True
-                    if (NEIGH_add[i][j] == ROUTING_table_path[i][k]):
+                    if (NEIGH_add[i][j] == DESTINATION_ROUTING_table_path[i][k]):
                         # Now check if it is the chosen path if it is treat according
                         G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
                     else:
@@ -1010,7 +1186,46 @@ def Update_Graph():
                 G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
     return G
 
-def Display_Graph (G):
+def Update_Origin_Graph():
+    #Updates the visualization for the path towards a client
+    # Initialize Graph
+    G = nx.DiGraph()
+    # Initialize legend array
+    legend = []
+    for i in range(0, len(NODE_index)):
+        if (NODE_index[i] in CLIENT_add):
+            # Adding Client nodes
+            G.add_node(NODE_index[i], color=Node_Color[0], size=Node_Size[1], shape=Node_Shape[0])
+            legend.append("Client Node " + str(NODE_index[i]))
+        elif (NODE_index[i] in DEST_add):
+            # Adding Dest nodes
+            G.add_node(NODE_index[i], color=Node_Color[1], size=Node_Size[2], shape=Node_Shape[1])
+            legend.append("Destination Node " + str(NODE_index[i]))
+        else:
+            # Adding routing nodes
+            G.add_node(NODE_index[i], color=Node_Color[2], size=Node_Size[0], shape=Node_Shape[2])
+            legend.append("Routing Node " + str(NODE_index[i]))
+        for j in range(0, len(NEIGH_add[i])):
+            # Adding edges
+            b_flag = False  # This flag says was the edge a path to the destination
+            for k in range(0, len(CLIENT_add)):
+                # We need to check if this edge is a path to the destination
+                if (NEIGH_add[i][j] in ORIGIN_ROUTING_table_next[i][k]):
+                    # It is a path
+                    b_flag = True
+                    if (NEIGH_add[i][j] == ORIGIN_ROUTING_table_path[i][k]):
+                        # Now check if it is the chosen path if it is treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
+                    else:
+                        # Only an available path thus treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width=Edge_Size[1])
+            if (not b_flag):
+                # The edge is not a path as such treat according
+                G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
+    return G
+
+def Display_Destination_Graph (G):
+    plt.close()
     # Now graph it
     pos = nx.spring_layout(G)
     labels_edge = nx.get_edge_attributes(G, 'color')
@@ -1022,43 +1237,206 @@ def Display_Graph (G):
     nx.draw_networkx(G, pos, with_labels=True, font_weight='bold', node_color=colors_node, node_size=size_nodes,
                      node_shape='D', edge_color=colors_edge, width=list(width_edge))
     # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels_edge)
-    plt.savefig(test_array[current_test] + "_result_network.pdf")
+    plt.savefig(test_array[current_test] +measurement_array[8]+ "_result_network.pdf")
     plt.show()  # display
+
+def Display_Origin_Graph (G):
+    plt.close()
+    # Now graph it
+    pos = nx.spring_layout(G)
+    labels_edge = nx.get_edge_attributes(G, 'color')
+    colors_edge = nx.get_edge_attributes(G, 'color').values()
+    width_edge = nx.get_edge_attributes(G, 'width').values()
+    colors_node = nx.get_node_attributes(G, 'color').values()
+    size_nodes = list(nx.get_node_attributes(G, 'size').values())
+    shapes_nodes = list(nx.get_node_attributes(G, 'shape').values())
+    nx.draw_networkx(G, pos, with_labels=True, font_weight='bold', node_color=colors_node, node_size=size_nodes,
+                     node_shape='D', edge_color=colors_edge, width=list(width_edge))
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels_edge)
+    plt.savefig(test_array[current_test] +measurement_array[9]+ "_result_network.pdf")
+    plt.show()  # display
+
+
+#Function that creates backups of the current measurements
+def Create_Backup():
+    print("########### Initializing Backups #############")
+    # Store the addresses here
+    # Address index corresponds to index of the measured node
+    BACKUP_NODE_index = np.copy(NODE_index)
+    # Store neighbour addresses here
+    BACKUP_NEIGH_add = np.copy(NEIGH_add)
+    # Store destination address here
+    BACKUP_DEST_add = np.copy(DEST_add)
+    # STores client addresses here
+    BACKUP_CLIENT_add = np.copy(CLIENT_add)
+    # Stores destination to client adds here
+    BACKUP_DEST_TO_CLIENT_add = np.copy(DEST_TO_CLIENT_add)
+    # Stores cliebnt to dest adds here
+    BACKUP_CLIENT_TO_DEST_add = np.copy(CLIENT_TO_DEST_add)
+    # Stores node to destination adds
+    BACKUP_NODE_TO_DEST_add = np.copy(NODE_TO_DEST_add)
+    # Stores node to client adds
+    BACKUP_NODE_TO_CLIENT_add = np.copy(NODE_TO_CLIENT_add)
+    # Data to be stored defined here
+    # Store the loads here
+    BACKUP_LOAD_array = np.copy(LOAD_array)
+    # Store amount of packets sent here
+    BACKUP_PACKETS_sent = np.copy(PACKETS_sent)
+    # Store amount of packets received here
+    BACKUP_PACKETS_received = np.copy(PACKETS_received)
+    # Store the average RSSI of received link rememeber it is signed
+    BACKUP_RSSI_value = np.copy(RSSI_value)
+    # Store the average SNR of received link rememeber this is again unsigned???? makes sure
+    BACKUP_SNR_value = np.copy(SNR_value)
+    # Stores the routing table next hop entries for each node for a given destination
+    BACKUP_DESTINATION_ROUTING_table_next = np.copy(DESTINATION_ROUTING_table_next)
+    # STores the next hop for the chosen path
+    BACKUP_DESTINATION_ROUTING_table_path = np.copy(DESTINATION_ROUTING_table_path)
+    # Stores the routing table next hop entries for each node for a given origin
+    BACKUP_ORIGIN_ROUTING_table_next = np.copy(ORIGIN_ROUTING_table_next)
+    # STores the next hop for the chosen path
+    BACKUP_ORIGIN_ROUTING_table_path = np.copy(ORIGIN_ROUTING_table_path)
+    # Stores the amount of messages packets received per epoch
+    BACKUP_Dest_RX_Amount = np.copy(Dest_RX_Amount)
+    # Stores the average PING for received messages
+    BACKUP_Dest_PING_Amount = np.copy(Dest_PING_Amount)
+    # Stores the amount of messages sent by client to destination per epoch
+    BACKUP_Client_TX_Amount = np.copy(Client_TX_Amount)
+    # STores the PDR for each link between node x and neighbour y
+    BACKUP_NODE_PDR_value = np.copy(NODE_PDR_value)
+    # Stores the ETX for each link between node x and neighbour y
+    BACKUP_NODE_ETX_value = np.copy(NODE_ETX_value)
+    return list(BACKUP_NODE_index),list(BACKUP_NEIGH_add),list(BACKUP_DEST_add),list(BACKUP_CLIENT_add),list(BACKUP_DEST_TO_CLIENT_add),list(BACKUP_CLIENT_TO_DEST_add)\
+        ,list(BACKUP_NODE_TO_DEST_add),list(BACKUP_NODE_TO_CLIENT_add),list(BACKUP_LOAD_array),list(BACKUP_PACKETS_sent),list(BACKUP_PACKETS_received),list(BACKUP_RSSI_value)\
+        ,list(BACKUP_SNR_value),list(BACKUP_DESTINATION_ROUTING_table_next),list(BACKUP_DESTINATION_ROUTING_table_path),\
+           list(BACKUP_ORIGIN_ROUTING_table_next),list(BACKUP_ORIGIN_ROUTING_table_path),list(BACKUP_Dest_RX_Amount),\
+           list(BACKUP_Dest_PING_Amount),list(BACKUP_Client_TX_Amount),list(BACKUP_NODE_PDR_value),list(BACKUP_NODE_ETX_value)
+
+def revert_to_backup(BACKUP_NODE_index,BACKUP_NEIGH_add,BACKUP_DEST_add,BACKUP_CLIENT_add,BACKUP_DEST_TO_CLIENT_add,BACKUP_CLIENT_TO_DEST_add\
+        ,BACKUP_NODE_TO_DEST_add,BACKUP_NODE_TO_CLIENT_add,BACKUP_LOAD_array,BACKUP_PACKETS_sent,BACKUP_PACKETS_received,BACKUP_RSSI_value\
+        ,BACKUP_SNR_value,BACKUP_DESTINATION_ROUTING_table_next,BACKUP_DESTINATION_ROUTING_table_path,\
+           BACKUP_ORIGIN_ROUTING_table_next,BACKUP_ORIGIN_ROUTING_table_path,BACKUP_Dest_RX_Amount,\
+           BACKUP_Dest_PING_Amount,BACKUP_Client_TX_Amount,BACKUP_NODE_PDR_value,BACKUP_NODE_ETX_value):
+    global NODE_index
+    global NEIGH_add
+    global DEST_add
+    global CLIENT_add
+    global DEST_TO_CLIENT_add
+    global CLIENT_TO_DEST_add
+    global NODE_TO_DEST_add
+    global NODE_TO_CLIENT_add
+    global LOAD_array
+    global PACKETS_sent
+    global PACKETS_received
+    global RSSI_value
+    global SNR_value
+    global DESTINATION_ROUTING_table_next
+    global DESTINATION_ROUTING_table_path
+    global ORIGIN_ROUTING_table_next
+    global ORIGIN_ROUTING_table_path
+    global Dest_RX_Amount
+    global Dest_PING_Amount
+    global Client_TX_Amount
+    global NODE_PDR_value
+    global NODE_ETX_value
+    print("########### Performing Backups Resetting #############")
+    #Take backups as inputs and revert stores variables to old values
+    # Address index corresponds to index of the measured node
+    NODE_index = list(np.copy(BACKUP_NODE_index))
+    # Store neighbour addresses here
+    NEIGH_add = list(np.copy(BACKUP_NEIGH_add))
+    # Store destination address here
+    DEST_add = list(np.copy(BACKUP_DEST_add))
+    # STores client addresses here
+    CLIENT_add = list(np.copy(BACKUP_CLIENT_add))
+    # Stores destination to client adds here
+    DEST_TO_CLIENT_add = list(np.copy(BACKUP_DEST_TO_CLIENT_add))
+    # Stores cliebnt to dest adds here
+    CLIENT_TO_DEST_add =list( np.copy(BACKUP_CLIENT_TO_DEST_add))
+    # Stores node to destination adds
+    NODE_TO_DEST_add =list( np.copy(BACKUP_NODE_TO_DEST_add))
+    # Stores node to client adds
+    NODE_TO_CLIENT_add =list( np.copy(BACKUP_NODE_TO_CLIENT_add))
+    # Data to be stored defined here
+    # Store the loads here
+    LOAD_array =list( np.copy(BACKUP_LOAD_array))
+    # Store amount of packets sent here
+    PACKETS_sent =list( np.copy(BACKUP_PACKETS_sent))
+    # Store amount of packets received here
+    PACKETS_received = list(np.copy(BACKUP_PACKETS_received))
+    # Store the average RSSI of received link rememeber it is signed
+    RSSI_value =list(np.copy(BACKUP_RSSI_value))
+    # Store the average SNR of received link rememeber this is again unsigned???? makes sure
+    SNR_value = list(np.copy(BACKUP_SNR_value))
+    # Stores the routing table next hop entries for each node for a given destination
+    DESTINATION_ROUTING_table_next =list( np.copy(BACKUP_DESTINATION_ROUTING_table_next))
+    # STores the next hop for the chosen path
+    DESTINATION_ROUTING_table_path = list(np.copy(BACKUP_DESTINATION_ROUTING_table_path))
+    # Stores the routing table next hop entries for each node for a given origin
+    ORIGIN_ROUTING_table_next =list( np.copy(BACKUP_ORIGIN_ROUTING_table_next))
+    # STores the next hop for the chosen path
+    ORIGIN_ROUTING_table_path = list(np.copy(BACKUP_ORIGIN_ROUTING_table_path))
+    # Stores the amount of messages packets received per epoch
+    Dest_RX_Amount =list( np.copy(BACKUP_Dest_RX_Amount))
+    # Stores the average PING for received messages
+    Dest_PING_Amount = list(np.copy(BACKUP_Dest_PING_Amount))
+    # Stores the amount of messages sent by client to destination per epoch
+    Client_TX_Amount = list(np.copy(BACKUP_Client_TX_Amount))
+    # STores the PDR for each link between node x and neighbour y
+    NODE_PDR_value = list(np.copy(BACKUP_NODE_PDR_value))
+    # Stores the ETX for each link between node x and neighbour y
+    NODE_ETX_value = list(np.copy(BACKUP_NODE_ETX_value))
 
 #Reads in standard routing node data
 def rx_Read_Node(ser,loops):
     global rxData
     global current_header
     global header
-    #Clear header trackers
+    # Make backup of global variables incase a message is missed
+    BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add, BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+        , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent, BACKUP_PACKETS_received, BACKUP_RSSI_value \
+        , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next, BACKUP_DESTINATION_ROUTING_table_path, \
+    BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+    BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value = Create_Backup()
+    # Clear header trackers
     header = 0
     current_header = ''
-    #Start measurements
-    rxData =  int.from_bytes(ser.read(1), "big")
-    #First Obtains the start of the measurements
+    # Start measurements
+    rxData = int.from_bytes(ser.read(1), "big")
+    # First Obtains the start of the measurements
     wait_for_start(ser)
-    #Clear header trackers
+    # Clear header trackers
     header = 0
     current_header = ''
-    #The start has been obtained measurements will now commence
-    #Remember for loop already read the next byte after the header
-    #First measurement is address
+    # The start has been obtained measurements will now commence
+    # Remember for loop already read the next byte after the header
+    # First measurement is address
     if rxData not in NODE_index:
         NODE_index.append(rxData)
-    #Obtain the index of the address
+    # Obtain the index of the address
     Address_Index = NODE_index.index(rxData)
-    #Read in First header value to denote start of load
+    # Read in First header value to denote start of load
     rxData = int.from_bytes(ser.read(1), "big")
-    wait_for_load_value(ser)
-    #Remember while loop read in last rx data
-    #Now wait for end line and read in the load data
+    if (wait_for_load_value(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # Remember while loop read in last rx data
+    # Now wait for end line and read in the load data
     load = read_load_data(ser)
-    if len(LOAD_array)==Address_Index:
+    if len(LOAD_array) == Address_Index:
         holder = [load]
         LOAD_array.append(holder)
     else:
         LOAD_array[Address_Index].append(load)
-    #This case the last read in byte was '\n' so we end here for now
+    # This case the last read in byte was '\n' so we end here for now
     print("######## PRINTING LOAD MEASUREMENTS #############")
     print("-----Current Index Of Nodes---------")
     print(NODE_index)
@@ -1067,11 +1445,22 @@ def rx_Read_Node(ser,loops):
     print(LOAD_array)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the sent data
-    #Read in Packet Sent Data (this is the current address)
-    read_in_packet_sent_data(ser)
+    # Now starts reading in the sent data
+    # Read in Packet Sent Data (this is the current address)
+    if (read_in_packet_sent_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+
     print("######## PRINTING PACKET SENT MEASUREMENTS #############")
-    #End of the packet sent data
+    # End of the packet sent data
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
     print("-------------------------------------")
@@ -1079,9 +1468,19 @@ def rx_Read_Node(ser,loops):
     print(PACKETS_sent)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the received data
-    read_in_packet_received_data(ser)
-    #End of the packet received data
+    # Now starts reading in the received data
+    if (read_in_packet_received_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # End of the packet received data
     print("######## PRINTING PACKET RECEIVED MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1090,8 +1489,18 @@ def rx_Read_Node(ser,loops):
     print(PACKETS_received)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the RSSI values
-    read_in_RSSI(ser)
+    # Now starts reading in the RSSI values
+    if (read_in_RSSI(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING RSSI MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1100,8 +1509,18 @@ def rx_Read_Node(ser,loops):
     print(RSSI_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the SNR values
-    read_in_SNR(ser)
+    # Now starts reading in the SNR values
+    if (read_in_SNR(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING SNR MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1110,9 +1529,19 @@ def rx_Read_Node(ser,loops):
     print(SNR_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Read the routing table entries
-    read_in_ROUTING_TABLE(ser)
-    print("######## PRINTING ROUTING TABLE MEASUREMENTS #############")
+    # Read the routing table entries
+    if (read_in_DESTINATION_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING DESTINATION ROUTING TABLE MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
     print("-------------------------------------")
@@ -1120,10 +1549,36 @@ def rx_Read_Node(ser,loops):
     print(NODE_TO_DEST_add)
     print("-------------------------------------")
     print("-----Chosen next hop path for each node to destination-----------")
-    print(ROUTING_table_path)
+    print(DESTINATION_ROUTING_table_path)
     print("-------------------------------------")
     print("-----All known next hop path for each node to destination-----------")
-    print(ROUTING_table_next)
+    print(DESTINATION_ROUTING_table_next)
+    print("-------------------------------------")
+    print("###########################################################")
+    # Read the routing table entries
+    if (read_in_ORIGIN_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known origin for known nodes-----------")
+    print(NODE_TO_CLIENT_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_next)
     print("-------------------------------------")
     print("###########################################################")
 
@@ -1131,59 +1586,120 @@ def rx_Read_Node(ser,loops):
     #Now we check if everything has been filled in correctly for the arrays
     for i in range(0,len(PACKETS_sent)):
         for j in range(0,len(PACKETS_sent[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_sent[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_sent[i][j][0]
+                PACKETS_sent[i][j][0] = 0
+                while len(PACKETS_sent[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_sent[i][j].append(0)
+                PACKETS_sent[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_sent[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_sent[i][j].append(0)
     for i in range(0,len(PACKETS_received)):
         for j in range(0,len(PACKETS_received[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_received[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_received[i][j][0]
+                PACKETS_received[i][j][0] = 0
+                while len(PACKETS_received[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_received[i][j].append(0)
+                PACKETS_received[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_received[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_received[i][j].append(0)
     for i in range(0,len(RSSI_value)):
         for j in range(0,len(RSSI_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(RSSI_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = RSSI_value[i][j][0]
+                RSSI_value[i][j][0] = 0
+                while len(RSSI_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    RSSI_value[i][j].append(0)
+                RSSI_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(RSSI_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 RSSI_value[i][j].append(0)
     for i in range(0,len(SNR_value)):
         for j in range(0,len(SNR_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(SNR_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = SNR_value[i][j][0]
+                SNR_value[i][j][0] = 0
+                while len(SNR_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    SNR_value[i][j].append(0)
+                SNR_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(SNR_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 SNR_value[i][j].append(0)
+    return False
 
 #Reads in standard destination node data
 def rx_Read_Dest(ser,loops):
     global rxData
     global current_header
     global header
-    #Clear header trackers
+    # Make backup of global variables incase a message is missed
+    BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add, BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+        , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent, BACKUP_PACKETS_received, BACKUP_RSSI_value \
+        , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next, BACKUP_DESTINATION_ROUTING_table_path, \
+    BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+    BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value = Create_Backup()
+    # Clear header trackers
     header = 0
     current_header = ''
-    #Start measurements
-    rxData =  int.from_bytes(ser.read(1), "big")
-    #First Obtains the start of the measurements
+    # Start measurements
+    rxData = int.from_bytes(ser.read(1), "big")
+    # First Obtains the start of the measurements
     wait_for_start(ser)
-    #Clear header trackers
+    # Clear header trackers
     header = 0
     current_header = ''
-    #The start has been obtained measurements will now commence
-    #Remember for loop already read the next byte after the header
-    #First measurement is address
+    # The start has been obtained measurements will now commence
+    # Remember for loop already read the next byte after the header
+    # First measurement is address
     if rxData not in NODE_index:
         NODE_index.append(rxData)
-    #Obtain the index of the address
+    # Obtain the index of the address
     Address_Index = NODE_index.index(rxData)
-    #Read in First header value to denote start of load
+    # Read in First header value to denote start of load
     rxData = int.from_bytes(ser.read(1), "big")
-    wait_for_load_value(ser)
-    #Remember while loop read in last rx data
-    #Now wait for end line and read in the load data
+    if (wait_for_load_value(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # Remember while loop read in last rx data
+    # Now wait for end line and read in the load data
     load = read_load_data(ser)
-    if len(LOAD_array)==Address_Index:
+    if len(LOAD_array) == Address_Index:
         holder = [load]
         LOAD_array.append(holder)
     else:
         LOAD_array[Address_Index].append(load)
-    #This case the last read in byte was '\n' so we end here for now
+    # This case the last read in byte was '\n' so we end here for now
     print("######## PRINTING LOAD MEASUREMENTS #############")
     print("-----Current Index Of Nodes---------")
     print(NODE_index)
@@ -1192,11 +1708,22 @@ def rx_Read_Dest(ser,loops):
     print(LOAD_array)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the sent data
-    #Read in Packet Sent Data (this is the current address)
-    read_in_packet_sent_data(ser)
+    # Now starts reading in the sent data
+    # Read in Packet Sent Data (this is the current address)
+    if (read_in_packet_sent_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+
     print("######## PRINTING PACKET SENT MEASUREMENTS #############")
-    #End of the packet sent data
+    # End of the packet sent data
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
     print("-------------------------------------")
@@ -1204,9 +1731,19 @@ def rx_Read_Dest(ser,loops):
     print(PACKETS_sent)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the received data
-    read_in_packet_received_data(ser)
-    #End of the packet received data
+    # Now starts reading in the received data
+    if (read_in_packet_received_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # End of the packet received data
     print("######## PRINTING PACKET RECEIVED MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1215,8 +1752,18 @@ def rx_Read_Dest(ser,loops):
     print(PACKETS_received)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the RSSI values
-    read_in_RSSI(ser)
+    # Now starts reading in the RSSI values
+    if (read_in_RSSI(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING RSSI MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1225,8 +1772,18 @@ def rx_Read_Dest(ser,loops):
     print(RSSI_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the SNR values
-    read_in_SNR(ser)
+    # Now starts reading in the SNR values
+    if (read_in_SNR(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING SNR MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1235,9 +1792,19 @@ def rx_Read_Dest(ser,loops):
     print(SNR_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Read the routing table entries
-    read_in_ROUTING_TABLE(ser)
-    print("######## PRINTING ROUTING TABLE MEASUREMENTS #############")
+    # Read the routing table entries
+    if (read_in_DESTINATION_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING DESTINATION ROUTING TABLE MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
     print("-------------------------------------")
@@ -1245,14 +1812,51 @@ def rx_Read_Dest(ser,loops):
     print(NODE_TO_DEST_add)
     print("-------------------------------------")
     print("-----Chosen next hop path for each node to destination-----------")
-    print(ROUTING_table_path)
+    print(DESTINATION_ROUTING_table_path)
     print("-------------------------------------")
     print("-----All known next hop path for each node to destination-----------")
-    print(ROUTING_table_next)
+    print(DESTINATION_ROUTING_table_next)
     print("-------------------------------------")
     print("###########################################################")
+    # Read the routing table entries
+    if (read_in_ORIGIN_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known origin for known nodes-----------")
+    print(NODE_TO_CLIENT_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_next)
+    print("-------------------------------------")
+    print("###########################################################")
+
     #Read in the message received data
-    read_in_AMOUNT_RECEIVED_DEST(ser)
+    if(read_in_AMOUNT_RECEIVED_DEST(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
@@ -1274,69 +1878,152 @@ def rx_Read_Dest(ser,loops):
     #Now we check if everything has been filled in correctly for the arrays
     for i in range(0,len(PACKETS_sent)):
         for j in range(0,len(PACKETS_sent[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_sent[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_sent[i][j][0]
+                PACKETS_sent[i][j][0] = 0
+                while len(PACKETS_sent[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_sent[i][j].append(0)
+                PACKETS_sent[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_sent[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_sent[i][j].append(0)
     for i in range(0,len(PACKETS_received)):
         for j in range(0,len(PACKETS_received[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_received[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_received[i][j][0]
+                PACKETS_received[i][j][0] = 0
+                while len(PACKETS_received[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_received[i][j].append(0)
+                PACKETS_received[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_received[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_received[i][j].append(0)
     for i in range(0,len(RSSI_value)):
         for j in range(0,len(RSSI_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(RSSI_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = RSSI_value[i][j][0]
+                RSSI_value[i][j][0] = 0
+                while len(RSSI_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    RSSI_value[i][j].append(0)
+                RSSI_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(RSSI_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 RSSI_value[i][j].append(0)
     for i in range(0,len(SNR_value)):
         for j in range(0,len(SNR_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(SNR_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = SNR_value[i][j][0]
+                SNR_value[i][j][0] = 0
+                while len(SNR_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    SNR_value[i][j].append(0)
+                SNR_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(SNR_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 SNR_value[i][j].append(0)
     for i in range(0,len(Dest_PING_Amount)):
         for j in range(0,len(Dest_PING_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Dest_PING_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Dest_PING_Amount[i][j][0]
+                Dest_PING_Amount[i][j][0] = 0
+                while len(Dest_PING_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Dest_PING_Amount[i][j].append(0)
+                Dest_PING_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(Dest_PING_Amount[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Dest_PING_Amount[i][j].append(0)
     for i in range(0,len(Dest_RX_Amount)):
         for j in range(0,len(Dest_RX_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Dest_RX_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Dest_RX_Amount[i][j][0]
+                Dest_PING_Amount[i][j][0] = 0
+                while len(Dest_RX_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Dest_RX_Amount[i][j].append(0)
+                Dest_RX_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(Dest_RX_Amount[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Dest_RX_Amount[i][j].append(0)
+    return False
 
 #Reads in standard client node data
 def rx_Read_Client(ser,loops):
     global rxData
     global current_header
     global header
-    #Clear header trackers
+    # Make backup of global variables incase a message is missed
+    BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add, BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+        , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent, BACKUP_PACKETS_received, BACKUP_RSSI_value \
+        , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next, BACKUP_DESTINATION_ROUTING_table_path, \
+    BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+    BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value = Create_Backup()
+    # Clear header trackers
     header = 0
     current_header = ''
-    #Start measurements
-    rxData =  int.from_bytes(ser.read(1), "big")
-    #First Obtains the start of the measurements
+    # Start measurements
+    rxData = int.from_bytes(ser.read(1), "big")
+    # First Obtains the start of the measurements
     wait_for_start(ser)
-    #Clear header trackers
+    # Clear header trackers
     header = 0
     current_header = ''
-    #The start has been obtained measurements will now commence
-    #Remember for loop already read the next byte after the header
-    #First measurement is address
+    # The start has been obtained measurements will now commence
+    # Remember for loop already read the next byte after the header
+    # First measurement is address
     if rxData not in NODE_index:
         NODE_index.append(rxData)
-    #Obtain the index of the address
+    # Obtain the index of the address
     Address_Index = NODE_index.index(rxData)
-    #Read in First header value to denote start of load
+    # Read in First header value to denote start of load
     rxData = int.from_bytes(ser.read(1), "big")
-    wait_for_load_value(ser)
-    #Remember while loop read in last rx data
-    #Now wait for end line and read in the load data
+    if (wait_for_load_value(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # Remember while loop read in last rx data
+    # Now wait for end line and read in the load data
     load = read_load_data(ser)
-    if len(LOAD_array)==Address_Index:
+    if len(LOAD_array) == Address_Index:
         holder = [load]
         LOAD_array.append(holder)
     else:
         LOAD_array[Address_Index].append(load)
-    #This case the last read in byte was '\n' so we end here for now
+    # This case the last read in byte was '\n' so we end here for now
     print("######## PRINTING LOAD MEASUREMENTS #############")
     print("-----Current Index Of Nodes---------")
     print(NODE_index)
@@ -1345,11 +2032,22 @@ def rx_Read_Client(ser,loops):
     print(LOAD_array)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the sent data
-    #Read in Packet Sent Data (this is the current address)
-    read_in_packet_sent_data(ser)
+    # Now starts reading in the sent data
+    # Read in Packet Sent Data (this is the current address)
+    if (read_in_packet_sent_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+
     print("######## PRINTING PACKET SENT MEASUREMENTS #############")
-    #End of the packet sent data
+    # End of the packet sent data
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
     print("-------------------------------------")
@@ -1357,9 +2055,19 @@ def rx_Read_Client(ser,loops):
     print(PACKETS_sent)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the received data
-    read_in_packet_received_data(ser)
-    #End of the packet received data
+    # Now starts reading in the received data
+    if (read_in_packet_received_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # End of the packet received data
     print("######## PRINTING PACKET RECEIVED MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1368,8 +2076,18 @@ def rx_Read_Client(ser,loops):
     print(PACKETS_received)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the RSSI values
-    read_in_RSSI(ser)
+    # Now starts reading in the RSSI values
+    if (read_in_RSSI(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING RSSI MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1378,8 +2096,18 @@ def rx_Read_Client(ser,loops):
     print(RSSI_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the SNR values
-    read_in_SNR(ser)
+    # Now starts reading in the SNR values
+    if (read_in_SNR(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING SNR MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1388,24 +2116,71 @@ def rx_Read_Client(ser,loops):
     print(SNR_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Read the routing table entries
-    read_in_ROUTING_TABLE(ser)
-    print("######## PRINTING ROUTING TABLE MEASUREMENTS #############")
+    # Read the routing table entries
+    if (read_in_DESTINATION_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING DESTINATION ROUTING TABLE MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
     print("-------------------------------------")
     print("-----Current List known destinations for known nodes-----------")
-    print(DEST_add)
+    print(NODE_TO_DEST_add)
     print("-------------------------------------")
     print("-----Chosen next hop path for each node to destination-----------")
-    print(ROUTING_table_path)
+    print(DESTINATION_ROUTING_table_path)
     print("-------------------------------------")
     print("-----All known next hop path for each node to destination-----------")
-    print(ROUTING_table_next)
+    print(DESTINATION_ROUTING_table_next)
     print("-------------------------------------")
     print("###########################################################")
+    # Read the routing table entries
+    if (read_in_ORIGIN_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known origin for known nodes-----------")
+    print(NODE_TO_CLIENT_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_next)
+    print("-------------------------------------")
+    print("###########################################################")
+
     # Read in the message sdent data
-    read_in_AMOUNT_SENT_CLIENT(ser)
+    if(read_in_AMOUNT_SENT_CLIENT(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
@@ -1424,64 +2199,136 @@ def rx_Read_Client(ser,loops):
     #Now we check if everything has been filled in correctly for the arrays
     for i in range(0,len(PACKETS_sent)):
         for j in range(0,len(PACKETS_sent[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_sent[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_sent[i][j][0]
+                PACKETS_sent[i][j][0] = 0
+                while len(PACKETS_sent[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_sent[i][j].append(0)
+                PACKETS_sent[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_sent[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_sent[i][j].append(0)
     for i in range(0,len(PACKETS_received)):
         for j in range(0,len(PACKETS_received[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_received[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_received[i][j][0]
+                PACKETS_received[i][j][0] = 0
+                while len(PACKETS_received[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_received[i][j].append(0)
+                PACKETS_received[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_received[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_received[i][j].append(0)
     for i in range(0,len(RSSI_value)):
         for j in range(0,len(RSSI_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(RSSI_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = RSSI_value[i][j][0]
+                RSSI_value[i][j][0] = 0
+                while len(RSSI_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    RSSI_value[i][j].append(0)
+                RSSI_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(RSSI_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 RSSI_value[i][j].append(0)
     for i in range(0,len(SNR_value)):
         for j in range(0,len(SNR_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(SNR_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = SNR_value[i][j][0]
+                SNR_value[i][j][0] = 0
+                while len(SNR_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    SNR_value[i][j].append(0)
+                SNR_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(SNR_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 SNR_value[i][j].append(0)
     for i in range(0,len(Client_TX_Amount)):
         for j in range(0,len(Client_TX_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Client_TX_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Client_TX_Amount[i][j][0]
+                Client_TX_Amount[i][j][0] = 0
+                while len(Client_TX_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Client_TX_Amount[i][j].append(0)
+                Client_TX_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(Client_TX_Amount[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Client_TX_Amount[i][j].append(0)
+    return False
 
 #Reads in standard client node data
 def rx_Read_TESTING(ser,loops):
     global rxData
     global current_header
     global header
-    #Clear header trackers
+    # Make backup of global variables incase a message is missed
+    BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add, BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+        , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent, BACKUP_PACKETS_received, BACKUP_RSSI_value \
+        , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next, BACKUP_DESTINATION_ROUTING_table_path, \
+    BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+    BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value = Create_Backup()
+    # Clear header trackers
     header = 0
     current_header = ''
-    #Start measurements
-    rxData =  int.from_bytes(ser.read(1), "big")
-    #First Obtains the start of the measurements
+    # Start measurements
+    rxData = int.from_bytes(ser.read(1), "big")
+    # First Obtains the start of the measurements
     wait_for_start(ser)
-    #Clear header trackers
+    # Clear header trackers
     header = 0
     current_header = ''
-    #The start has been obtained measurements will now commence
-    #Remember for loop already read the next byte after the header
-    #First measurement is address
+    # The start has been obtained measurements will now commence
+    # Remember for loop already read the next byte after the header
+    # First measurement is address
     if rxData not in NODE_index:
         NODE_index.append(rxData)
-    #Obtain the index of the address
+    # Obtain the index of the address
     Address_Index = NODE_index.index(rxData)
-    #Read in First header value to denote start of load
+    # Read in First header value to denote start of load
     rxData = int.from_bytes(ser.read(1), "big")
-    wait_for_load_value(ser)
-    #Remember while loop read in last rx data
-    #Now wait for end line and read in the load data
+    if (wait_for_load_value(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # Remember while loop read in last rx data
+    # Now wait for end line and read in the load data
     load = read_load_data(ser)
-    if len(LOAD_array)==Address_Index:
+    if len(LOAD_array) == Address_Index:
         holder = [load]
         LOAD_array.append(holder)
     else:
         LOAD_array[Address_Index].append(load)
-    #This case the last read in byte was '\n' so we end here for now
+    # This case the last read in byte was '\n' so we end here for now
     print("######## PRINTING LOAD MEASUREMENTS #############")
     print("-----Current Index Of Nodes---------")
     print(NODE_index)
@@ -1490,11 +2337,22 @@ def rx_Read_TESTING(ser,loops):
     print(LOAD_array)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the sent data
-    #Read in Packet Sent Data (this is the current address)
-    read_in_packet_sent_data(ser)
+    # Now starts reading in the sent data
+    # Read in Packet Sent Data (this is the current address)
+    if (read_in_packet_sent_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+
     print("######## PRINTING PACKET SENT MEASUREMENTS #############")
-    #End of the packet sent data
+    # End of the packet sent data
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
     print("-------------------------------------")
@@ -1502,9 +2360,19 @@ def rx_Read_TESTING(ser,loops):
     print(PACKETS_sent)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the received data
-    read_in_packet_received_data(ser)
-    #End of the packet received data
+    # Now starts reading in the received data
+    if (read_in_packet_received_data(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+        # End of the packet received data
     print("######## PRINTING PACKET RECEIVED MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1513,8 +2381,18 @@ def rx_Read_TESTING(ser,loops):
     print(PACKETS_received)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the RSSI values
-    read_in_RSSI(ser)
+    # Now starts reading in the RSSI values
+    if (read_in_RSSI(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING RSSI MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1523,8 +2401,18 @@ def rx_Read_TESTING(ser,loops):
     print(RSSI_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Now starts reading in the SNR values
-    read_in_SNR(ser)
+    # Now starts reading in the SNR values
+    if (read_in_SNR(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING SNR MEASUREMENTS #############")
     print("-----Current List Of Neighbours-----------")
     print(NEIGH_add)
@@ -1533,24 +2421,71 @@ def rx_Read_TESTING(ser,loops):
     print(SNR_value)
     print("-------------------------------------")
     print("###########################################################")
-    #Read the routing table entries
-    read_in_ROUTING_TABLE(ser)
-    print("######## PRINTING ROUTING TABLE MEASUREMENTS #############")
+    # Read the routing table entries
+    if (read_in_DESTINATION_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING DESTINATION ROUTING TABLE MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
     print("-------------------------------------")
     print("-----Current List known destinations for known nodes-----------")
-    print(DEST_add)
+    print(NODE_TO_DEST_add)
     print("-------------------------------------")
     print("-----Chosen next hop path for each node to destination-----------")
-    print(ROUTING_table_path)
+    print(DESTINATION_ROUTING_table_path)
     print("-------------------------------------")
     print("-----All known next hop path for each node to destination-----------")
-    print(ROUTING_table_next)
+    print(DESTINATION_ROUTING_table_next)
     print("-------------------------------------")
     print("###########################################################")
+    # Read the routing table entries
+    if (read_in_ORIGIN_ROUTING_TABLE(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
+    print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
+    print("-----Current list of known nodes-----------")
+    print(NODE_index)
+    print("-------------------------------------")
+    print("-----Current List known origin for known nodes-----------")
+    print(NODE_TO_CLIENT_add)
+    print("-------------------------------------")
+    print("-----Chosen next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_path)
+    print("-------------------------------------")
+    print("-----All known next hop path for each node to origin-----------")
+    print(ORIGIN_ROUTING_table_next)
+    print("-------------------------------------")
+    print("###########################################################")
+
     # Read in the message sdent data
-    read_in_AMOUNT_SENT_CLIENT(ser)
+    if(read_in_AMOUNT_SENT_CLIENT(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
@@ -1566,7 +2501,17 @@ def rx_Read_TESTING(ser,loops):
     print("-------------------------------------")
     print("###########################################################")
     #Read in the message received data
-    read_in_AMOUNT_RECEIVED_DEST(ser)
+    if(read_in_AMOUNT_RECEIVED_DEST(ser)):
+        # This means error occured so decrease i and revert variables. Lastly exit this function
+        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
+                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+                         BACKUP_DESTINATION_ROUTING_table_path, \
+                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+        return True
     print("######## PRINTING DESTINATION RECIVED RX AND PING MEASUREMENTS #############")
     print("-----Current list of known nodes-----------")
     print(NODE_index)
@@ -1588,39 +2533,118 @@ def rx_Read_TESTING(ser,loops):
     #Now we check if everything has been filled in correctly for the arrays
     for i in range(0,len(PACKETS_sent)):
         for j in range(0,len(PACKETS_sent[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_sent[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_sent[i][j][0]
+                PACKETS_sent[i][j][0] = 0
+                while len(PACKETS_sent[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_sent[i][j].append(0)
+                PACKETS_sent[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_sent[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_sent[i][j].append(0)
     for i in range(0,len(PACKETS_received)):
         for j in range(0,len(PACKETS_received[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(PACKETS_received[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = PACKETS_received[i][j][0]
+                PACKETS_received[i][j][0] = 0
+                while len(PACKETS_received[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    PACKETS_received[i][j].append(0)
+                PACKETS_received[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(PACKETS_received[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 PACKETS_received[i][j].append(0)
     for i in range(0,len(RSSI_value)):
         for j in range(0,len(RSSI_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(RSSI_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = RSSI_value[i][j][0]
+                RSSI_value[i][j][0] = 0
+                while len(RSSI_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    RSSI_value[i][j].append(0)
+                RSSI_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(RSSI_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 RSSI_value[i][j].append(0)
     for i in range(0,len(SNR_value)):
         for j in range(0,len(SNR_value[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(SNR_value[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = SNR_value[i][j][0]
+                SNR_value[i][j][0] = 0
+                while len(SNR_value[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    SNR_value[i][j].append(0)
+                SNR_value[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(SNR_value[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 SNR_value[i][j].append(0)
-    for i in range(0,len(Client_TX_Amount)):
-        for j in range(0,len(Client_TX_Amount[i])):
-            while len(Client_TX_Amount[i][j])<loops+1:
-                #Nothing was received at this time step as such put 0 so all arrays are equal length
-                Client_TX_Amount[i][j].append(0)
     for i in range(0,len(Dest_PING_Amount)):
         for j in range(0,len(Dest_PING_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Dest_PING_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Dest_PING_Amount[i][j][0]
+                Dest_PING_Amount[i][j][0] = 0
+                while len(Dest_PING_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Dest_PING_Amount[i][j].append(0)
+                Dest_PING_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(Dest_PING_Amount[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Dest_PING_Amount[i][j].append(0)
     for i in range(0,len(Dest_RX_Amount)):
         for j in range(0,len(Dest_RX_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Dest_RX_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Dest_RX_Amount[i][j][0]
+                Dest_PING_Amount[i][j][0] = 0
+                while len(Dest_RX_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Dest_RX_Amount[i][j].append(0)
+                Dest_RX_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
             while len(Dest_RX_Amount[i][j])<loops+1:
                 #Nothing was received at this time step as such put 0 so all arrays are equal length
                 Dest_RX_Amount[i][j].append(0)
+    for i in range(0,len(Client_TX_Amount)):
+        for j in range(0,len(Client_TX_Amount[i])):
+            #Used to recover new sudden nodes that join
+            if (( len(Client_TX_Amount[i][j])==1) and (loops>1)):
+                #This means this measurement randomly joined in the middle of messuring
+                #Create a dummy fill as usual and add dummy at the end
+                dummy = Client_TX_Amount[i][j][0]
+                Client_TX_Amount[i][j][0] = 0
+                while len(Client_TX_Amount[i][j]) < loops:
+                    # Nothing was received at this time step as such put 0 so all arrays are equal length
+                    Client_TX_Amount[i][j].append(0)
+                Client_TX_Amount[i][j].append(dummy)
+            #USed to recover nodes vanashing then rejoining
+            while len(Client_TX_Amount[i][j])<loops+1:
+                #Nothing was received at this time step as such put 0 so all arrays are equal length
+                Client_TX_Amount[i][j].append(0)
+                
+    return False
 
 if __name__ == "__main__":
     if live:
@@ -1675,9 +2699,12 @@ if __name__ == "__main__":
             exit()
         header = 0
         #Merely samples the serial at these intervals
+
         for i in range(NUM_SAMPLES):
-            rx_Read_TESTING(ser_Test,i)
+            if(rx_Read_TESTING(ser_Test,i)):
+                i=i-1
             plt.pause(1/SAMPLING_FREQ)
+
         print("########### Starting Plotting Data ###########")
         #Print the load data
         print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
@@ -1893,11 +2920,17 @@ if __name__ == "__main__":
             plt.show()
             plt.close()
 
-        print("###### Plotting Visualization Of Network ###############")
-        Network = nx.DiGraph()
-        G = Update_Graph()
-        Network.update(G)
-        Display_Graph(Network)
+        print("########### Plotting " + DATATYPE_LIST[8] + " ###########")
+        DST_Network = nx.DiGraph()
+        G = Update_Destination_Graph()
+        DST_Network.update(G)
+        Display_Destination_Graph(DST_Network)
+
+        print("########### Plotting " + DATATYPE_LIST[9] + " ###########")
+        ORIGIN_Network = nx.DiGraph()
+        G = Update_Origin_Graph()
+        ORIGIN_Network.update(G)
+        Display_Origin_Graph(ORIGIN_Network)
 
 
     if show_network_graph:
@@ -1906,12 +2939,12 @@ if __name__ == "__main__":
         DEST_add = [130]
         CLIENT_add = [100]
         NEIGH_add = [[110, 120], [100, 120, 130], [100, 110, 130], [110, 120]]
-        ROUTING_table_next = [[[120]], [[130]], [[130]], [[130]]]
-        ROUTING_table_path = [[120], [130], [130], [130]]
-        Network = nx.DiGraph()
-        G = Update_Graph()
-        Network.update(G)
-        Display_Graph(Network)
+        DESTINATION_ROUTING_table_next = [[[120]], [[130]], [[130]], [[130]]]
+        DESTINATION_ROUTING_table_path = [[120], [130], [130], [130]]
+        DST_Network = nx.DiGraph()
+        G = Update_Destination_Graph()
+        DST_Network.update(G)
+        Display_Destination_Graph(DST_Network)
 
 
 

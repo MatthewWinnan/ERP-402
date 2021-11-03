@@ -33,6 +33,7 @@ Ping is given in terms of the current clock cycles since start time. CLOCKS_PER_
 'TE' denotes that a table entry of a path has been observed
 'CP' CP denotes that the next hop following is the chosen path
 'DA' DA denotes that the destination address is following
+'OA' OA denotes that the origin address is following
 'CN' CN denotes that the client node data follows
 
 
@@ -48,16 +49,17 @@ Always start next set of measurements with the current node's address.
 4) Gets calculated by using the data of 2 and 3 per link.
 5) ['Routing node address','N','S','Neighbour source','R','I','RSSI measurement','R','A'........,'\n'],
 6) ['Routing node address','N','S','Neighbour source','S','N','SNR measurement','R','A'........,'\n'],
-7) ['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
+7) ['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n'],
+8) ['Routing node address','O','A','Origin address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
 ----------------------------------------------------------------------------------------------------
 Following are additional parameters to be sent by destination node.
-8) ['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
-9) Is calculated by using the data from 8 for both the source and destination
-10) Is calculated by using 9's Ping reading
+9) ['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
+10) Is calculated by using the data from 9 for both the source and destination
+11) Is calculated by using 10's Ping reading
 
 Following are addtional parameters sent by the source node.
-8) ['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
-9) Is calculated by using the data from 8 for both the source and destination 
+9) ['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
+10) Is calculated by using the data from 9 for both the source and destination 
 
 For the simulator the data is stored as follows:
 NODE_index = []
@@ -140,15 +142,29 @@ SNR_value = []
 4) SNR_value[x][y] is the time series of the SNR for the link between node and neighbour
 
 #Stores the routing table next hop entries for each node for a given destination
-ROUTING_table_next = []
+DESTINATION_ROUTING_table_next= []
 1) 3-D array stores the current available next hop paths from a node to a known destination
 2) Index of node in ROUTING_table_next corresponds to index of node in Node_index
 3) Index in ROUTING_table_next[x] corresponds to the destination index in NODE_TO_DEST_add[x]
 4) ROUTING_table_next[x][y] is the array of known next hops to destination
 
 #STores the next hop for the chosen path
-ROUTING_table_path = []
+DESTINATION_ROUTING_table_path= []
 1) 3-D array stores the current chosen path from a node to a known destination
+2) Index of node in ROUTING_table_path corresponds to index of node in Node_index
+3) Index in ROUTING_table_path[x] corresponds to the destination index in NODE_TO_DEST_add[x]
+4) ROUTING_table_path[x][y] is the next hop entry
+
+#Stores the routing table next hop entries for each node for a given origin
+ORIGIN_ROUTING_table_next= []
+1) 3-D array stores the current available next hop paths from a node to a known origin
+2) Index of node in ROUTING_table_next corresponds to index of node in Node_index
+3) Index in ROUTING_table_next[x] corresponds to the destination index in NODE_TO_DEST_add[x]
+4) ROUTING_table_next[x][y] is the array of known next hops to destination
+
+#STores the next hop for the chosen path
+ORIGIN_ROUTING_table_path= []
+1) 3-D array stores the current chosen path from a node to a known origin
 2) Index of node in ROUTING_table_path corresponds to index of node in Node_index
 3) Index in ROUTING_table_path[x] corresponds to the destination index in NODE_TO_DEST_add[x]
 4) ROUTING_table_path[x][y] is the next hop entry
