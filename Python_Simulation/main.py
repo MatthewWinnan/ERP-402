@@ -29,7 +29,7 @@ TOA = T_preamble+T_payload
 amount_symbols = int(1/TOA)
 
 #Define client packet frequency
-packet_freq = 10
+packet_freq = 1
 #Define hallo frequency
 hallo_freq = 1
 
@@ -208,7 +208,7 @@ if __name__ == "__main__":
             for t in range(0, len(HALLO_rx)):
                 removal_neigh_holder = []
                 for g in range(0, len(HALLO_rx[t])):
-                    if HALLO_rx[t][g] < hallo_freq:
+                    if HALLO_rx[t][g] < hallo_freq/2:
                         # print(HALLO_rx[t][g])
                         # Remove the neighbour from the neighbour list
                         hallo_time_out+=1
@@ -297,7 +297,7 @@ if __name__ == "__main__":
                         NEIGH_rx[node_neigh_index][rx_index]+=1
                         HALLO_rx[node_neigh_index][rx_index]+=1
                 #Update timer for hallo
-                NODE_Hallo[NODE_Hallo.index(j)] = (NODE_Hallo[NODE_Hallo.index(j)]+ amount_symbols/hallo_freq)%amount_symbols
+                NODE_Hallo[NODE_Hallo.index(j)] = int((NODE_Hallo[NODE_Hallo.index(j)]+ amount_symbols/hallo_freq)%amount_symbols)
             if j in CLIENT_tx:
                 #This node then sends a hallo
                 node_index = NODE_index.index(CLIENT_add[CLIENT_tx.index(j)])
