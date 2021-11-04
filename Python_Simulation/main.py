@@ -29,7 +29,7 @@ TOA = T_preamble+T_payload
 amount_symbols = int(1/TOA)
 
 #Define client packet frequency
-packet_freq = 2
+packet_freq = 1
 #Define hallo frequency
 hallo_freq = 1
 
@@ -101,7 +101,8 @@ NEIGH_add = [[110,120],[100,120,130],[100,110,130],[110,120]]
 NEIGH_add_distance = [[10,10],[10,10,10],[10,10,10],[10,10]]
 #Store the average SNR of received link rememeber this is again unsigned???? makes sure dB
 SNR_value = [[10,10],[10,10,10],[10,10,10],[10,10]]
-
+#Hallo time outs
+hallo_time_out = 0
 #Store destination address here
 DEST_add = [130]
 
@@ -195,9 +196,32 @@ if __name__ == "__main__":
     print(CLIENT_tx)
     #Some assunptions made for now. Now RREQ messages or RREP yet only HALLO and MAIN message for now
     #PATHS have been initialized already thus the client starts sending a message
+
     for i in range(0,time_length):
         #Initialize the events each second
+        if i > 0:
+            # Only do this after the first time step
+            # First check if no hallo timer has been missed
+            #Repeat until flag is down
+            flag = True
+            for t in range(0, len(HALLO_rx)):
+                for g in range(0, len(HALLO_rx[t])):
+                    if HALLO_rx[t][g] < hallo_freq:
+                        # print(HALLO_rx[t][g])
+                        # Remove the neighbour from the neighbour list
+                        hallo_time_out+=1
+
+
+        HALLO_rx = []
+        for t in range(0, len(NEIGH_add)):
+            holder = []
+            for g in range(0, len(NEIGH_add[t])):
+                holder.append(0)
+            HALLO_rx.append(holder)
         for j in range(0,amount_symbols):
+            #Reset the checker
+            # STores amount hallo received per second downlink
+            # If this amount is not at least hallo freq then link breaks
             #Here we will propagate the sent message with the nodes
             for t in range(0,len(MESSAGE_rx)):
                 if ((MESSAGE_rx[t]-MESSAGE_RX_PREV[t]>0) and (NODE_index[t] not in CLIENT_add) and (NODE_index[t] not in DEST_add)):
@@ -224,15 +248,15 @@ if __name__ == "__main__":
                         #Because every neigh will get the packet just not repond to it
                         NEIGH_tx[node_index][p] += 1
                     if not (is_collide(collision(traffic * 8, 1))):
-                        # Message went through
-                        MESSAGE_rx[target_index]+=1
-                        NODE_rx[target_index] += 1
-                        if NODE_index[target_index] in DEST_add:
-                            DEST_MESSAGE_rx[DEST_add.index(NODE_index[target_index] )]+=1
-
-                        # Update rx
-                        rx_index = NEIGH_add[target_index].index(NODE_index[node_index])
-                        NEIGH_rx[target_index][rx_index] += 1
+                        #CHeck if there is a path
+                        if NODE_index[node_index] in NEIGH_add[target_index]:
+                            # Message went through
+                            MESSAGE_rx[target_index]+=1
+                            NODE_rx[target_index] += 1
+                            if NODE_index[target_index] in DEST_add:
+                                DEST_MESSAGE_rx[DEST_add.index(NODE_index[target_index] )]+=1
+                            rx_index = NEIGH_add[target_index].index(NODE_index[node_index])
+                            NEIGH_rx[target_index][rx_index] += 1
             #Make a prev copy again
             MESSAGE_RX_PREV = list(np.copy(MESSAGE_rx))
             #Initializes the amount for smallest possible time step
@@ -253,19 +277,19 @@ if __name__ == "__main__":
                 NODE_tx[node_index] += 1
                 for k in range(0,len(local_neigh)):
                     # UPdate tx
-                    for p in range(0, len(NEIGH_tx[node_index])):
-                        NEIGH_tx[node_index][p] += 1
-
+                    NEIGH_tx[node_index][k] += 1
                     if not (is_collide(collision(traffic*8,1))):
                         #Message went through
-                        HALLO_rx[node_index][k]+=1
                         NODE_rx[NODE_index.index(NEIGH_add[node_index][k])]+=1
+                        if (NODE_index[node_index] not in NEIGH_add[NODE_index.index(NEIGH_add[node_index][k])]):
+                            #Append me to the neighbour list
+                            NEIGH_add[NODE_index.index(NEIGH_add[node_index][k])].append(NODE_index[node_index])
+                            HALLO_rx[NODE_index.index(NEIGH_add[node_index][k])].append(NODE_index[node_index])
                         #Update rx
-                        for p in range(0,len(local_neigh)):
-                            node_neigh_index = NODE_index.index(local_neigh[p])
-                            rx_index = NEIGH_add[node_neigh_index].index(NODE_index[node_index])
-                            NEIGH_rx[node_neigh_index][rx_index]+=1
-                            HALLO_rx[node_neigh_index][rx_index]+=1
+                        node_neigh_index = NODE_index.index(local_neigh[k])
+                        rx_index = NEIGH_add[node_neigh_index].index(NODE_index[node_index])
+                        NEIGH_rx[node_neigh_index][rx_index]+=1
+                        HALLO_rx[node_neigh_index][rx_index]+=1
                 #Update timer for hallo
                 NODE_Hallo[NODE_Hallo.index(j)] = (NODE_Hallo[NODE_Hallo.index(j)]+ amount_symbols/hallo_freq)%amount_symbols
             if j in CLIENT_tx:
@@ -292,14 +316,15 @@ if __name__ == "__main__":
                 for p in range(0, len(NEIGH_tx[node_index])):
                     NEIGH_tx[node_index][p] += 1
                 if not (is_collide(collision(traffic * 8, 1))):
-                    # Message went through
-                    MESSAGE_rx[target_index]+=1
-                    NODE_rx[target_index] += 1
-                    # Update rx
-                    rx_index = NEIGH_add[target_index].index(NODE_index[node_index])
-                    NEIGH_rx[target_index][rx_index] += 1
+                    if (NODE_index[node_index] in NEIGH_add[target_index]):
+                        # Message went through
+                        MESSAGE_rx[target_index]+=1
+                        NODE_rx[target_index] += 1
+                        # Update rx
+                        rx_index = NEIGH_add[target_index].index(NODE_index[node_index])
+                        NEIGH_rx[target_index][rx_index] += 1
                 # Update timer for message
-                CLIENT_tx[CLIENT_tx.index(j)] = (CLIENT_tx[CLIENT_tx.index(j)] + amount_symbols / packet_freq) % amount_symbols
+                CLIENT_tx[CLIENT_tx.index(j)] = int((CLIENT_tx[CLIENT_tx.index(j)] + amount_symbols / packet_freq) % amount_symbols)
         #After all events have been driven create a time stamp array similar to what is done for the measurement model
         #Save Loads
         for s in range(0,len(NODE_rx)):
@@ -318,13 +343,9 @@ if __name__ == "__main__":
         Dest_RX_Amount[0].append(DEST_MESSAGE_rx[0])
         #Now clear the trackers
         # STores amount messages sent per second uplink
-        print(NEIGH_tx)
         NEIGH_tx = [[0, 0], [0, 0, 0], [0, 0, 0], [0, 0]]
         # STores amount messages received per second downlink
         NEIGH_rx = [[0, 0], [0, 0, 0], [0, 0, 0], [0, 0]]
-        # STores amount hallo received per second downlink
-        # If this amount is not at least hallo freq then link breaks
-        HALLO_rx = [[0, 0], [0, 0, 0], [0, 0, 0], [0, 0]]
         # Defines when client sent message
         MESSAGE_tx = [0]
         DEST_MESSAGE_rx = [0]
@@ -337,3 +358,4 @@ if __name__ == "__main__":
     print(PACKETS_sent)
     print(PACKETS_received)
     print(Dest_RX_Amount)
+    print(hallo_time_out)
