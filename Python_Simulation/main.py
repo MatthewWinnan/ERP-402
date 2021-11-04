@@ -29,7 +29,7 @@ TOA = T_preamble+T_payload
 amount_symbols = int(1/TOA)
 
 #Define client packet frequency
-packet_freq = 1
+packet_freq = 10
 #Define hallo frequency
 hallo_freq = 1
 
@@ -204,14 +204,20 @@ if __name__ == "__main__":
             # First check if no hallo timer has been missed
             #Repeat until flag is down
             flag = True
+            removal_neigh = []
             for t in range(0, len(HALLO_rx)):
+                removal_neigh_holder = []
                 for g in range(0, len(HALLO_rx[t])):
                     if HALLO_rx[t][g] < hallo_freq:
                         # print(HALLO_rx[t][g])
                         # Remove the neighbour from the neighbour list
                         hallo_time_out+=1
-
-
+                        removal_neigh_holder.append(NEIGH_add[t][g])
+                removal_neigh.append(removal_neigh_holder)
+            #After all nodes been obtained that needs deletion start removing
+            for t in range(0, len(removal_neigh)):
+                for g in range(0, len(removal_neigh[t])):
+                    NEIGH_add[t].remove(removal_neigh[t][g])
         HALLO_rx = []
         for t in range(0, len(NEIGH_add)):
             holder = []
