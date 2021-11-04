@@ -195,7 +195,7 @@ if __name__ == "__main__":
         #Initialize the events each second
         for j in range(0,amount_symbols):
             #Here we will propagate the sent message with the nodes
-            #Update trye to update maybe
+            #Update trye to update maybe trickled it???
             #Initializes the amount for smallest possible time step
             if j in NODE_Hallo:
                 #This node then sends a hallo
