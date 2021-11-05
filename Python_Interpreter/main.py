@@ -1175,7 +1175,7 @@ def Update_Destination_Graph():
                 if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_next[i][k]):
                     # It is a path
                     b_flag = True
-                    if (NEIGH_add[i][j] == DESTINATION_ROUTING_table_path[i][k]):
+                    if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_path[i][k]):
                         # Now check if it is the chosen path if it is treat according
                         G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
                     else:
@@ -1213,7 +1213,7 @@ def Update_Origin_Graph():
                 if (NEIGH_add[i][j] in ORIGIN_ROUTING_table_next[i][k]):
                     # It is a path
                     b_flag = True
-                    if (NEIGH_add[i][j] == ORIGIN_ROUTING_table_path[i][k]):
+                    if (NEIGH_add[i][j] in ORIGIN_ROUTING_table_path[i][k]):
                         # Now check if it is the chosen path if it is treat according
                         G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
                     else:
