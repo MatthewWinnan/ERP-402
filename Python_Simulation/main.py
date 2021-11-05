@@ -8,8 +8,8 @@ import bitstring
 import networkx as nx
 
 #Define what needs to be tested
-AODV = False
-AOMDV = False
+AODV = True
+AOMDV = True
 AOMDV_LB = True
 GRAPH = False
 
@@ -36,7 +36,7 @@ TOA = T_preamble+T_payload
 amount_symbols = int(1/TOA)
 
 #Define client packet frequency
-packet_freq = 20
+packet_freq = 10
 #Define hallo frequency
 hallo_freq = 2
 
@@ -105,9 +105,53 @@ NODE_ETX_value = []
 if __name__ == "__main__":
     # Define how long the simulation must go on for
     time_length = 120  # seconds
+    NUM_SAMPLES = time_length
+    SAMPLING_FREQ = 1
+    X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
+    #Define the test name
+    # Define the test strings
+    test_array = ["Sim_1_AODV","Sim_1_AOMDV","Sim_1_AOMDV-LB"]
+    # Libraries used for graphing
+    # Defining what colors the nodes should be
+    # r = clients
+    # b = destination
+    # g = routing nodes
+    Node_Color = ["r", "b", "g"]
+    # Defining what color the edges should be
+    # k = merely neighbours
+    # y = valid path to destination/origin
+    # m = chosen path to destination
+    Edge_Color = ['k', 'y', 'm']
+    # Defining what sizes the nodes should be
+    # 2 = clients
+    # 3 = destination
+    # 1 = routing nodes
+    Node_Size = [600, 900, 1200]
+    # Defining what thickness the edges should be
+    # 1 = merely neighbours
+    # 2 = valid path to destination/origin
+    # 3 = chosen path to destination
+    Edge_Size = [1, 2, 3]
+    # Defining the shapes of the nodes
+    # "v" = clients
+    # "^" = destination
+    # "o" = routing nodes
+    Node_Shape = ['v', '^', 'o']
+    # Libraries for graphing
+    DATATYPE_LIST = ['Load (packets/s)', 'Packet Delivery Ration', 'ETX value for link',
+                     'RSSI for link (dB)', 'SNR for link (dB)', 'Throughput (packets/s)', 'Packet Delay (ms)',
+                     'Message Delivery Ratio', 'Destination Route Visualize', 'Origin Route Visualize']
+    LINE_COLORS = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w']
+    # Measurements taken
+    measurement_array = ["_load_per_node", "_pdr_per_node", "_etx_per_node", "_rssi_per_node", "_snr_per_node",
+                         "_throughput_per_dest", "_ping_per_dest", "_mdr_per_dest", "_dest_route_visual",
+                         "_origin_route_visual"]
 
 
     if AODV:
+        # What test are we doing????
+        current_test = 0
+
         print("#### Starting AODV Simulations ########")
         # Store the addresses here
         # Address index corresponds to index of the measured node
@@ -406,7 +450,156 @@ if __name__ == "__main__":
         print(PACKETS_received)
         print(Dest_RX_Amount)
         print(hallo_time_out)
+        print("########### Starting Plotting Data ###########")
+        #Print the load data
+        print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
+        plt.ylabel(DATATYPE_LIST[0])
+        plt.xlabel("Time (s)")
+        # fig.tight_layout()
+        plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+        plt.grid(True)
+        #Obtaining the legend array
+        legend = []
+        for i in range (0,len(NODE_index)):
+            legend.append("Node "+str(NODE_index[i]))
+        for i in range(0,len(LOAD_array)):
+            plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
+        plt.legend(legend)
+        plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
+        plt.show()
+        plt.close()
+        #Print the load data
+        print("########### Plotting " + DATATYPE_LIST[1] + " ###########")
+        #Now plotting the PDR data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[1])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    if (PACKETS_sent[node_index][my_index][k]!=0):
+                        PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    else:
+                        PDR_data.append(0)
+                    #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                plt.plot(X_axis, PDR_data, LINE_COLORS[j])
+                holder.append(PDR_data)
+            NODE_PDR_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[1] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[2] + " ###########")
+        #Now plotting the ETX data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[2])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
+                        CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                    else:
+                        CETX_data.append(0)
+                plt.plot(X_axis, CETX_data, LINE_COLORS[j])
+                holder.append(CETX_data)
+            NODE_ETX_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[2] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[5] + " ###########")
+        #Now plotting the Throughput data
+        for i in range(0,len(Dest_RX_Amount)):
+            plt.ylabel(DATATYPE_LIST[5])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            client_add = 100
+            # Define the RX holder
+            RX_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Dest_RX_Amount[i])):
+                # for k in range(0,len(Dest_RX_Amount[i][j])):
+                RX_holder.append(Dest_RX_Amount[i][j])
+            plt.plot(X_axis, RX_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[5] + "_for_destination_"+str(DEST_add[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
+        #Now plotting the MDR data
+        for i in range(0,len(Client_TX_Amount)):
+            plt.ylabel(DATATYPE_LIST[7])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            dest_add = 130
+            # Define the mdr holder
+            MDR_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Client_TX_Amount[i])):
+                #Obtain index of the current client the measurements were received from
+                dest_index = DEST_add.index(dest_add)
+                # Obtain index of the current destination in the client's destination index
+                my_index = 0
+                #As such the corresponding data received was received by dest_index from my_index
+                if (Client_TX_Amount[i][j]!=0):
+                    MDR_holder.append(Dest_RX_Amount[dest_index][my_index]/Client_TX_Amount[i][j])
+                else:
+                    MDR_holder.append(0)
+            plt.plot(X_axis, MDR_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
+            plt.show()
+            plt.close()
+
+
+
+
+
     if AOMDV:
+        # What test are we doing????
+        current_test = 1
         print("#### Starting AOMDV Simulations ########")
         # Store the addresses here
         # Address index corresponds to index of the measured node
@@ -767,7 +960,152 @@ if __name__ == "__main__":
         print(PACKETS_received)
         print(Dest_RX_Amount)
         print(hallo_time_out)
+        print("########### Starting Plotting Data ###########")
+        #Print the load data
+        print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
+        plt.ylabel(DATATYPE_LIST[0])
+        plt.xlabel("Time (s)")
+        # fig.tight_layout()
+        plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+        plt.grid(True)
+        #Obtaining the legend array
+        legend = []
+        for i in range (0,len(NODE_index)):
+            legend.append("Node "+str(NODE_index[i]))
+        for i in range(0,len(LOAD_array)):
+            plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
+        plt.legend(legend)
+        plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
+        plt.show()
+        plt.close()
+        #Print the load data
+        print("########### Plotting " + DATATYPE_LIST[1] + " ###########")
+        #Now plotting the PDR data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[1])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    if (PACKETS_sent[node_index][my_index][k]!=0):
+                        PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    else:
+                        PDR_data.append(0)
+                    #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                plt.plot(X_axis, PDR_data, LINE_COLORS[j])
+                holder.append(PDR_data)
+            NODE_PDR_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[1] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[2] + " ###########")
+        #Now plotting the ETX data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[2])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
+                        CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                    else:
+                        CETX_data.append(0)
+                plt.plot(X_axis, CETX_data, LINE_COLORS[j])
+                holder.append(CETX_data)
+            NODE_ETX_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[2] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[5] + " ###########")
+        #Now plotting the Throughput data
+        for i in range(0,len(Dest_RX_Amount)):
+            plt.ylabel(DATATYPE_LIST[5])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            client_add = 100
+            # Define the RX holder
+            RX_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Dest_RX_Amount[i])):
+                # for k in range(0,len(Dest_RX_Amount[i][j])):
+                RX_holder.append(Dest_RX_Amount[i][j])
+            plt.plot(X_axis, RX_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[5] + "_for_destination_"+str(DEST_add[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
+        #Now plotting the MDR data
+        for i in range(0,len(Client_TX_Amount)):
+            plt.ylabel(DATATYPE_LIST[7])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            dest_add = 130
+            # Define the mdr holder
+            MDR_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Client_TX_Amount[i])):
+                #Obtain index of the current client the measurements were received from
+                dest_index = DEST_add.index(dest_add)
+                # Obtain index of the current destination in the client's destination index
+                my_index = 0
+                #As such the corresponding data received was received by dest_index from my_index
+                if (Client_TX_Amount[i][j]!=0):
+                    MDR_holder.append(Dest_RX_Amount[dest_index][my_index]/Client_TX_Amount[i][j])
+                else:
+                    MDR_holder.append(0)
+            plt.plot(X_axis, MDR_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
+            plt.show()
+            plt.close()
+
     if AOMDV_LB:
+        # What test are we doing????
+        current_test = 2
         print("#### Starting AOMDV Simulations ########")
         # Store the addresses here
         # Address index corresponds to index of the measured node
@@ -1168,6 +1506,149 @@ if __name__ == "__main__":
         print(PACKETS_received)
         print(Dest_RX_Amount)
         print(hallo_time_out)
+        print("########### Starting Plotting Data ###########")
+        #Print the load data
+        print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
+        plt.ylabel(DATATYPE_LIST[0])
+        plt.xlabel("Time (s)")
+        # fig.tight_layout()
+        plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+        plt.grid(True)
+        #Obtaining the legend array
+        legend = []
+        for i in range (0,len(NODE_index)):
+            legend.append("Node "+str(NODE_index[i]))
+        for i in range(0,len(LOAD_array)):
+            plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
+        plt.legend(legend)
+        plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
+        plt.show()
+        plt.close()
+        #Print the load data
+        print("########### Plotting " + DATATYPE_LIST[1] + " ###########")
+        #Now plotting the PDR data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[1])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    if (PACKETS_sent[node_index][my_index][k]!=0):
+                        PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    else:
+                        PDR_data.append(0)
+                    #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                plt.plot(X_axis, PDR_data, LINE_COLORS[j])
+                holder.append(PDR_data)
+            NODE_PDR_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[1] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[2] + " ###########")
+        #Now plotting the ETX data
+        for i in range(0,len(PACKETS_received)):
+            plt.ylabel(DATATYPE_LIST[2])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            holder = []
+            for j in range(0,len(PACKETS_received[i])):
+                # Define the array
+                PDR_data = []
+                # define the cetx array too
+                CETX_data = []
+                neigh_add = NEIGH_add_rx[i][j]
+                legend.append("Neighbour " + str(neigh_add))
+                for k in range(0,len(PACKETS_received[i][j])):
+                    #Obtain index of the current neighbour the measurements were received from
+                    node_index = NODE_index.index(neigh_add)
+                    # Obtain index of the current node in the neighbour's neighbour index
+                    my_index = NEIGH_add_rx[node_index].index(NODE_index[i])
+                    #As such the corresponding data received was sent by node_index to my_index
+                    #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
+                        CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                    else:
+                        CETX_data.append(0)
+                plt.plot(X_axis, CETX_data, LINE_COLORS[j])
+                holder.append(CETX_data)
+            NODE_ETX_value.append(holder)
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[2] + "_for_node_"+str(NODE_index[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[5] + " ###########")
+        #Now plotting the Throughput data
+        for i in range(0,len(Dest_RX_Amount)):
+            plt.ylabel(DATATYPE_LIST[5])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            client_add = 100
+            # Define the RX holder
+            RX_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Dest_RX_Amount[i])):
+                # for k in range(0,len(Dest_RX_Amount[i][j])):
+                RX_holder.append(Dest_RX_Amount[i][j])
+            plt.plot(X_axis, RX_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[5] + "_for_destination_"+str(DEST_add[i])+".pdf")
+            plt.show()
+            plt.close()
+        print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
+        #Now plotting the MDR data
+        for i in range(0,len(Client_TX_Amount)):
+            plt.ylabel(DATATYPE_LIST[7])
+            plt.xlabel("Time (s)")
+            # fig.tight_layout()
+            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+            plt.grid(True)
+            # Construct legend for this node's data
+            legend = []
+            dest_add = 130
+            # Define the mdr holder
+            MDR_holder = []
+            legend.append("Client " + str(client_add))
+            for j in range(0,len(Client_TX_Amount[i])):
+                #Obtain index of the current client the measurements were received from
+                dest_index = DEST_add.index(dest_add)
+                # Obtain index of the current destination in the client's destination index
+                my_index = 0
+                #As such the corresponding data received was received by dest_index from my_index
+                if (Client_TX_Amount[i][j]!=0):
+                    MDR_holder.append(Dest_RX_Amount[dest_index][my_index]/Client_TX_Amount[i][j])
+                else:
+                    MDR_holder.append(0)
+            plt.plot(X_axis, MDR_holder, LINE_COLORS[i])
+            plt.legend(legend)
+            plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
+            plt.show()
+            plt.close()
+
     if GRAPH:
         print(channel_cap(10)/8)
         x_axis = []
