@@ -72,6 +72,60 @@ def is_collide(prob):
     else:
         return False
 
+def Update_Destination_Graph(NEIGH_add):
+    #Updates the visualization for the path towards a destination
+    # Initialize Graph
+    G = nx.DiGraph()
+    # Initialize legend array
+    legend = []
+    for i in range(0, len(NODE_index)):
+        if (NODE_index[i] in CLIENT_add):
+            # Adding Client nodes
+            G.add_node(NODE_index[i], color=Node_Color[0], size=Node_Size[1], shape=Node_Shape[0])
+            legend.append("Client Node " + str(NODE_index[i]))
+        elif (NODE_index[i] in DEST_add):
+            # Adding Dest nodes
+            G.add_node(NODE_index[i], color=Node_Color[1], size=Node_Size[2], shape=Node_Shape[1])
+            legend.append("Destination Node " + str(NODE_index[i]))
+        else:
+            # Adding routing nodes
+            G.add_node(NODE_index[i], color=Node_Color[2], size=Node_Size[0], shape=Node_Shape[2])
+            legend.append("Routing Node " + str(NODE_index[i]))
+        for j in range(0, len(NEIGH_add[i])):
+            # Adding edges
+            b_flag = False  # This flag says was the edge a path to the destination
+            for k in range(0, len(DEST_add)):
+                # We need to check if this edge is a path to the destination
+                if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_next[i][k]):
+                    # It is a path
+                    b_flag = True
+                    if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_path[i][k]):
+                        # Now check if it is the chosen path if it is treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
+                    else:
+                        # Only an available path thus treat according
+                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width=Edge_Size[1])
+            if (not b_flag):
+                # The edge is not a path as such treat according
+                G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
+    return G
+
+def Display_Destination_Graph (G):
+    plt.close()
+    # Now graph it
+    pos = nx.spring_layout(G)
+    labels_edge = nx.get_edge_attributes(G, 'color')
+    colors_edge = nx.get_edge_attributes(G, 'color').values()
+    width_edge = nx.get_edge_attributes(G, 'width').values()
+    colors_node = nx.get_node_attributes(G, 'color').values()
+    size_nodes = list(nx.get_node_attributes(G, 'size').values())
+    shapes_nodes = list(nx.get_node_attributes(G, 'shape').values())
+    nx.draw_networkx(G, pos, with_labels=True, font_weight='bold', node_color=colors_node, node_size=size_nodes,
+                     node_shape='D', edge_color=colors_edge, width=list(width_edge))
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=labels_edge)
+    plt.savefig(test_array[current_test] +measurement_array[8]+ "_result_network.pdf")
+    plt.show()  # display
+
 
 #Stores destination to client adds here
 DEST_TO_CLIENT_add = []
@@ -311,9 +365,9 @@ if __name__ == "__main__":
                         target_index = NODE_index.index(target)
                         # Update my tx
                         NODE_tx[node_index] += 1
-                        for p in range(0, len(NEIGH_tx[node_index])):
-                            # Because every neigh will get the packet just not repond to it
-                            NEIGH_tx[node_index][p] += 1
+                        if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                            neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                            NEIGH_tx[node_index][neigh_target_index] += 1
                         traffic = NODE_tx[target_index] + NODE_rx[target_index]
                         if not (is_collide(collision(traffic, 1))):
                             # CHeck if there is a path
@@ -384,8 +438,9 @@ if __name__ == "__main__":
                     NODE_tx[node_index] += 1
                     # UPdate tx
                     MESSAGE_tx[node_index] += 1
-                    for p in range(0, len(NEIGH_tx[node_index])):
-                        NEIGH_tx[node_index][p] += 1
+                    if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                        neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                        NEIGH_tx[node_index][neigh_target_index] += 1
                     traffic = NODE_tx[target_index] + NODE_rx[target_index]
                     if not (is_collide(collision(traffic , 1))):
                         if (NODE_index[node_index] in NEIGH_add_tx[target_index]):
@@ -592,6 +647,11 @@ if __name__ == "__main__":
             plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
             plt.show()
             plt.close()
+            print("########### Plotting " + DATATYPE_LIST[8] + " ###########")
+            DST_Network = nx.DiGraph()
+            G = Update_Destination_Graph(NEIGH_add_rx)
+            DST_Network.update(G)
+            Display_Destination_Graph(DST_Network)
 
 
 
@@ -707,7 +767,7 @@ if __name__ == "__main__":
         for i in range(0, time_length):
             # Initialize the events each second
             if i > 0:
-                # Only do this after the first time step
+                # Only do this after the first time stepFF
                 # First check if no hallo timer has been missed
                 # Repeat until flag is down
                 flag = True
@@ -758,9 +818,10 @@ if __name__ == "__main__":
                         target_index = NODE_index.index(target)
                         # Update my tx
                         NODE_tx[node_index] += 1
-                        for p in range(0, len(NEIGH_tx[node_index])):
-                            # Because every neigh will get the packet just not repond to it
-                            NEIGH_tx[node_index][p] += 1
+                        #Obtain neighbour index in tx
+                        if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                            neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                            NEIGH_tx[node_index][neigh_target_index] += 1
                         traffic = NODE_tx[target_index] + NODE_rx[target_index]
                         if not (is_collide(collision(traffic, 1))):
                             # CHeck if there is a path
@@ -788,6 +849,10 @@ if __name__ == "__main__":
                                         # Try to see if we can yse this path
                                         new_target = route_next[i]
                                         new_target_index = NODE_index.index(new_target)
+                                        if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                                            neigh_target_index = NEIGH_add_tx[node_index].index(
+                                                NODE_index[new_target_index])
+                                            NEIGH_tx[node_index][neigh_target_index] += 1
                                         traffic = NODE_tx[new_target_index] + NODE_rx[new_target_index]
                                         if not (is_collide(collision(traffic, 1))):
                                             if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
@@ -865,8 +930,9 @@ if __name__ == "__main__":
                     NODE_tx[node_index] += 1
                     # UPdate tx
                     MESSAGE_tx[node_index] += 1
-                    for p in range(0, len(NEIGH_tx[node_index])):
-                        NEIGH_tx[node_index][p] += 1
+                    if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                        neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                        NEIGH_tx[node_index][neigh_target_index] += 1
                     traffic = NODE_tx[target_index] + NODE_rx[target_index]
                     if not (is_collide(collision(traffic , 1))):
                         if (NODE_index[target_index] in NEIGH_add_tx[node_index]):
@@ -890,6 +956,9 @@ if __name__ == "__main__":
                                     #Try to see if we can yse this path
                                     new_target = route_next[i]
                                     new_target_index = NODE_index.index(new_target)
+                                    if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                                        neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
+                                        NEIGH_tx[node_index][neigh_target_index] += 1
                                     traffic = NODE_tx[new_target_index] + NODE_rx[new_target_index]
                                     if not (is_collide(collision(traffic, 1))):
                                         if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
@@ -1102,6 +1171,11 @@ if __name__ == "__main__":
             plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
             plt.show()
             plt.close()
+            print("########### Plotting " + DATATYPE_LIST[8] + " ###########")
+            DST_Network = nx.DiGraph()
+            G = Update_Destination_Graph(NEIGH_add_rx)
+            DST_Network.update(G)
+            Display_Destination_Graph(DST_Network)
 
     if AOMDV_LB:
         # What test are we doing????
@@ -1264,9 +1338,9 @@ if __name__ == "__main__":
                         target_index = NODE_index.index(target)
                         # Update my tx
                         NODE_tx[node_index] += 1
-                        for p in range(0, len(NEIGH_tx[node_index])):
-                            # Because every neigh will get the packet just not repond to it
-                            NEIGH_tx[node_index][p] += 1
+                        if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                            neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                            NEIGH_tx[node_index][neigh_target_index] += 1
                         # Before the algorithm starts it proceeds to find the traffic for it's neighbours in order of next hop in table
                         traffic_neighbour = []
                         traffic_neigh_add = []
@@ -1316,6 +1390,9 @@ if __name__ == "__main__":
                                         # Try to see if we can yse this path
                                         new_target = route_next[i]
                                         new_target_index = NODE_index.index(new_target)
+                                        if NODE_index[new_target_index] in NEIGH_add_tx[node_index]:
+                                            neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
+                                            NEIGH_tx[node_index][neigh_target_index] += 1
                                         if not (is_collide(collision(traffic, 1))):
                                             if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                                 # Message went through
@@ -1391,8 +1468,9 @@ if __name__ == "__main__":
                     NODE_tx[node_index] += 1
                     # UPdate tx
                     MESSAGE_tx[node_index] += 1
-                    for p in range(0, len(NEIGH_tx[node_index])):
-                        NEIGH_tx[node_index][p] += 1
+                    if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                        neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
+                        NEIGH_tx[node_index][neigh_target_index] += 1
                     # Before the algorithm starts it proceeds to find the traffic for it's neighbours in order of next hop in table
                     traffic_neighbour = []
                     traffic_neigh_add = []
@@ -1437,6 +1515,9 @@ if __name__ == "__main__":
                                     #Try to see if we can yse this path
                                     new_target = route_next[i]
                                     new_target_index = NODE_index.index(new_target)
+                                    if NODE_index[target_index] in NEIGH_add_tx[node_index]:
+                                        neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
+                                        NEIGH_tx[node_index][neigh_target_index] += 1
                                     if not (is_collide(collision(traffic, 1))):
                                         if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                             # Message went through
@@ -1648,6 +1729,11 @@ if __name__ == "__main__":
             plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
             plt.show()
             plt.close()
+            print("########### Plotting " + DATATYPE_LIST[8] + " ###########")
+            DST_Network = nx.DiGraph()
+            G = Update_Destination_Graph(NEIGH_add_rx)
+            DST_Network.update(G)
+            Display_Destination_Graph(DST_Network)
 
     if GRAPH:
         print(channel_cap(10)/8)
