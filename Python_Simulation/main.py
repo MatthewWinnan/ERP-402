@@ -36,7 +36,7 @@ TOA = T_preamble+T_payload
 amount_symbols = int(1/TOA)
 
 #Define client packet frequency
-packet_freq = 10
+packet_freq = 1
 #Define hallo frequency
 hallo_freq = 2
 
@@ -369,7 +369,7 @@ if __name__ == "__main__":
                             neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
                             NEIGH_tx[node_index][neigh_target_index] += 1
                         traffic = NODE_tx[target_index] + NODE_rx[target_index]
-                        if not (is_collide(collision(traffic, 1))):
+                        if not (is_collide(collision(traffic * (PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # CHeck if there is a path
                             if NODE_index[node_index] in NEIGH_add_tx[target_index]:
                                 # Message went through
@@ -402,7 +402,7 @@ if __name__ == "__main__":
                         NEIGH_tx[node_index][k] += 1
                         temp_index = NODE_index.index(local_neigh[k])
                         traffic = NODE_rx[temp_index] + NODE_rx[temp_index]
-                        if not (is_collide(collision(traffic , 1))):
+                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # Message went through
                             NODE_rx[NODE_index.index(NEIGH_add_rx[node_index][k])] += 1
                             if (NODE_index[node_index] not in NEIGH_add_tx[NODE_index.index(NEIGH_add_rx[node_index][k])]):
@@ -442,7 +442,7 @@ if __name__ == "__main__":
                         neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
                         NEIGH_tx[node_index][neigh_target_index] += 1
                     traffic = NODE_tx[target_index] + NODE_rx[target_index]
-                    if not (is_collide(collision(traffic , 1))):
+                    if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                         if (NODE_index[node_index] in NEIGH_add_tx[target_index]):
                             # Message went through
                             MESSAGE_rx[target_index] += 1
@@ -823,7 +823,7 @@ if __name__ == "__main__":
                             neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
                             NEIGH_tx[node_index][neigh_target_index] += 1
                         traffic = NODE_tx[target_index] + NODE_rx[target_index]
-                        if not (is_collide(collision(traffic, 1))):
+                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # CHeck if there is a path
                             if NODE_index[target_index] in NEIGH_add_tx[node_index]:
                                 #We essentially checked if the next hop neighbour is in the neighbour table,
@@ -854,7 +854,7 @@ if __name__ == "__main__":
                                                 NODE_index[new_target_index])
                                             NEIGH_tx[node_index][neigh_target_index] += 1
                                         traffic = NODE_tx[new_target_index] + NODE_rx[new_target_index]
-                                        if not (is_collide(collision(traffic, 1))):
+                                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                                             if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                                 # Message went through
                                                 MESSAGE_rx[new_target_index] += 1
@@ -894,7 +894,7 @@ if __name__ == "__main__":
                         NEIGH_tx[node_index][k] += 1
                         temp_index = NODE_index.index(local_neigh[k])
                         traffic = NODE_rx[temp_index] + NODE_rx[temp_index]
-                        if not (is_collide(collision(traffic , 1))):
+                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # Message went through
                             NODE_rx[NODE_index.index(NEIGH_add_rx[node_index][k])] += 1
                             if (NODE_index[node_index] not in NEIGH_add_tx[NODE_index.index(NEIGH_add_rx[node_index][k])]):
@@ -934,7 +934,7 @@ if __name__ == "__main__":
                         neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[target_index])
                         NEIGH_tx[node_index][neigh_target_index] += 1
                     traffic = NODE_tx[target_index] + NODE_rx[target_index]
-                    if not (is_collide(collision(traffic , 1))):
+                    if not (is_collide(collision(traffic*(PACKET_LENGTH+PREAMBLE_BYTE) , 1))):
                         if (NODE_index[target_index] in NEIGH_add_tx[node_index]):
                                 # Message went through
                             MESSAGE_rx[target_index] += 1
@@ -960,7 +960,7 @@ if __name__ == "__main__":
                                         neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
                                         NEIGH_tx[node_index][neigh_target_index] += 1
                                     traffic = NODE_tx[new_target_index] + NODE_rx[new_target_index]
-                                    if not (is_collide(collision(traffic, 1))):
+                                    if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                                         if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                             # Message went through
                                             MESSAGE_rx[new_target_index] += 1
@@ -1163,7 +1163,7 @@ if __name__ == "__main__":
                 my_index = 0
                 #As such the corresponding data received was received by dest_index from my_index
                 if (Client_TX_Amount[i][j]!=0):
-                    MDR_holder.append(Dest_RX_Amount[dest_index][my_index]/Client_TX_Amount[i][j])
+                    MDR_holder.append(Client_TX_Amount[i][j])
                 else:
                     MDR_holder.append(0)
             plt.plot(X_axis, MDR_holder, LINE_COLORS[i])
@@ -1364,7 +1364,7 @@ if __name__ == "__main__":
                             # Obtain the load for the target address
                             target_load = NODE_tx[target_index] + NODE_rx[target_index]
 
-                        if not (is_collide(collision(target_load, 1))):
+                        if not (is_collide(collision(target_load *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # CHeck if there is a path
                             if NODE_index[target_index] in NEIGH_add_tx[node_index]:
                                 #We essentially checked if the next hop neighbour is in the neighbour table,
@@ -1393,7 +1393,7 @@ if __name__ == "__main__":
                                         if NODE_index[new_target_index] in NEIGH_add_tx[node_index]:
                                             neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
                                             NEIGH_tx[node_index][neigh_target_index] += 1
-                                        if not (is_collide(collision(traffic, 1))):
+                                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                                             if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                                 # Message went through
                                                 MESSAGE_rx[new_target_index] += 1
@@ -1432,7 +1432,7 @@ if __name__ == "__main__":
                         NEIGH_tx[node_index][k] += 1
                         temp_index = NODE_index.index(local_neigh[k])
                         traffic = NODE_tx[temp_index] + NODE_rx[temp_index]
-                        if not (is_collide(collision(traffic , 1))):
+                        if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                             # Message went through
                             NODE_rx[NODE_index.index(NEIGH_add_rx[node_index][k])] += 1
                             if (NODE_index[node_index] not in NEIGH_add_tx[NODE_index.index(NEIGH_add_rx[node_index][k])]):
@@ -1492,7 +1492,7 @@ if __name__ == "__main__":
                         target_index = NODE_index.index(lowest_index)
                         # Obtain the load for the target address
                         target_load = NODE_tx[target_index] + NODE_rx[target_index]
-                    if not (is_collide(collision(target_load , 1))):
+                    if not (is_collide(collision(target_load *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                         if (NODE_index[target_index] in NEIGH_add_tx[node_index]):
                                 # Message went through
                             MESSAGE_rx[target_index] += 1
@@ -1518,7 +1518,7 @@ if __name__ == "__main__":
                                     if NODE_index[target_index] in NEIGH_add_tx[node_index]:
                                         neigh_target_index = NEIGH_add_tx[node_index].index(NODE_index[new_target_index])
                                         NEIGH_tx[node_index][neigh_target_index] += 1
-                                    if not (is_collide(collision(traffic, 1))):
+                                    if not (is_collide(collision(traffic *(PACKET_LENGTH+PREAMBLE_BYTE), 1))):
                                         if (NODE_index[new_target_index] in NEIGH_add_tx[node_index]):
                                             # Message went through
                                             MESSAGE_rx[new_target_index] += 1
@@ -1742,7 +1742,7 @@ if __name__ == "__main__":
             x_axis.append(i)
         y_axis = []
         for i in range(0,len(x_axis)):
-            y_axis.append(collision(x_axis[i]/8,1))
+            y_axis.append(collision(x_axis[i]*(PACKET_LENGTH+PREAMBLE_BYTE)/8,1))
         plt.plot(x_axis,y_axis)
         plt.show()
 

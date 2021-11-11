@@ -204,3 +204,5 @@ NODE_ETX_value = []
 2) Index of node in NODE_ETX_value corresponds to index of node in Node_index
 3) Index in NODE_ETX_value[x] corresponds to the neighbour index in PACKETS_received[x]
 4) NODE_ETX_value[x][y] is the time series of the etx for the link
+
+

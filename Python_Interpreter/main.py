@@ -18,8 +18,8 @@ show_network_graph = False
 #Setting COM options
 #General COM parameters
 BYTE_ORDER = 'big'  # or 'big'
-SAMPLING_FREQ = 0.2  # Hz (every 5 sec)
-SAMPLING_TIME = 20 # Time to sample in seconds
+SAMPLING_FREQ = 1  # Hz (every 1 sec)
+SAMPLING_TIME = 10 # Time to sample in seconds
 NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
 BAUD_RATE = 9600
 
@@ -36,7 +36,7 @@ COM_PORT_NODE_DESTINATION = 'COM33'
 # What test are we doing????
 current_test = 0
 # Define the test strings
-test_array = ["Case_1"]
+test_array = ["Defining"]
 #Measurements taken
 measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node",
                      "_throughput_per_dest","_ping_per_dest","_mdr_per_dest","_dest_route_visual","_origin_route_visual"]
@@ -2692,17 +2692,32 @@ if __name__ == "__main__":
     elif not live:
         try:
             # Setup the serial
-            ser_Test = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_TEST + ".")
+            ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_CLIENT + ".")
         except:
-            print("Could not connect to the device "+COM_PORT_TEST+".")
+            print("Could not connect to the device "+COM_PORT_NODE_CLIENT+".")
+            exit()
+        try:
+            # Setup the serial
+            ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+        except:
+            print("Could not connect to the device "+COM_PORT_NODE_DESTINATION+".")
+            exit()
+        try:
+            # Setup the serial
+            ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_1 + ".")
+        except:
+            print("Could not connect to the device "+COM_PORT_NODE_1+".")
             exit()
         header = 0
         #Merely samples the serial at these intervals
 
         for i in range(NUM_SAMPLES):
-            if(rx_Read_TESTING(ser_Test,i)):
+            if(rx_Read_Client(ser_Client,i) and rx_Read_Dest(ser_Dst,i) and rx_Read_Node(ser_R1,i)):
                 i=i-1
+
             plt.pause(1/SAMPLING_FREQ)
 
         print("########### Starting Plotting Data ###########")
