@@ -21,7 +21,7 @@ BYTE_ORDER = 'big'  # or 'big'
 SAMPLING_FREQ = 1  # Hz (every 1 sec)
 SAMPLING_TIME = 10 # Time to sample in seconds
 NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
-BAUD_RATE = 9600
+BAUD_RATE = 115200
 
 #PORTS for specific devices
 COM_PORT_TEST = 'COM19'
@@ -30,6 +30,7 @@ COM_PORT_NODE_1 = 'COM34'
 COM_PORT_NODE_2 = 'COM35'
 COM_PORT_NODE_3 = 'COM30'
 COM_PORT_NODE_4 = 'COM3'
+# COM_PORT_NODE_DESTINATION = 'COM33'
 COM_PORT_NODE_DESTINATION = 'COM33'
 
 #TEST PARAMETERS
@@ -400,17 +401,21 @@ def read_load_data(ser):
     global header
 
     load = 0
+    i = 0
     current_header = ''
 
     while (rxData != Stop_Byte):
         print("read_load_data current byte is " + str(rxData))
         #Adds the measurement to the variable
-        load = load<<8 | rxData
+        load = load <<8 | (rxData)
+        # load = rxData - 48
         # Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
     while (rxData!=Next_Line):
         # Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
+
     return load
 
 def read_in_measurement(ser):
@@ -420,15 +425,17 @@ def read_in_measurement(ser):
 
     sent = 0
     current_header = ''
+    i = 0
 
     while (rxData != Stop_Byte) and (chr(rxData) != 'R'):
         print("read_in_measurement current byte is " + str(rxData))
         #Adds the measurement to the variable
         sent = sent<<8 | rxData
+        # sent = rxData
         # Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
     return sent
-
 
 
 def measure_RSSI(ser):
@@ -444,11 +451,12 @@ def measure_RSSI(ser):
         print("read_in_RSSI current byte is " + str(rxData))
         #Adds the measurement to the variable
         sent = sent<<8 | rxData
+        #sent = rxData
         # Reads next byte
-        rxData = int.from_bytes(ser.read(1), "big")
+        rxData = int.from_bytes(ser.read(1), "big",signed=True)
         loop+=1
     #Convert from unsigned to signed
-    sent = bitstring.BitArray(uint = sent, length=loop*8).int
+    sent = -bitstring.BitArray(uint = sent, length=loop*8).int
     return sent
 
 def read_in_AMOUNT_RX(ser):
@@ -464,6 +472,7 @@ def read_in_AMOUNT_RX(ser):
         print("read_in_AMOUNT_RX current byte is " + str(rxData))
         #Adds the measurement to the variable
         sent = sent<<8 | rxData
+        #sent = rxData
         # Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
         loop+=1
@@ -807,7 +816,10 @@ def read_in_DESTINATION_ROUTING_TABLE(ser):
         if destination_add not in NODE_TO_DEST_add[Address_Index]:
             NODE_TO_DEST_add[Address_Index].append(destination_add)
 
-        Address_Index_Dest = NODE_TO_DEST_add[Address_Index].index(destination_add)
+        try:
+            Address_Index_Dest = NODE_TO_DEST_add[Address_Index].index(destination_add)
+        except:
+            print(NODE_TO_DEST_add)
         # Now obtain the chosen path , first wait for header
         rxData = int.from_bytes(ser.read(1), "big")
         # Clear header trackers
@@ -1167,23 +1179,30 @@ def Update_Destination_Graph():
             # Adding routing nodes
             G.add_node(NODE_index[i], color=Node_Color[2], size=Node_Size[0], shape=Node_Shape[2])
             legend.append("Routing Node " + str(NODE_index[i]))
-        for j in range(0, len(NEIGH_add[i])):
-            # Adding edges
-            b_flag = False  # This flag says was the edge a path to the destination
-            for k in range(0, len(DEST_add)):
-                # We need to check if this edge is a path to the destination
-                if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_next[i][k]):
-                    # It is a path
-                    b_flag = True
-                    if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_path[i][k]):
-                        # Now check if it is the chosen path if it is treat according
-                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
-                    else:
-                        # Only an available path thus treat according
-                        G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width=Edge_Size[1])
-            if (not b_flag):
-                # The edge is not a path as such treat according
-                G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
+        try:
+            for j in range(0, len(NEIGH_add[i])):
+                # Adding edges
+                b_flag = False  # This flag says was the edge a path to the destination
+                for k in range(0, len(DEST_add)):
+                    # We need to check if this edge is a path to the destination
+                    if (NEIGH_add[i][j] in DESTINATION_ROUTING_table_next[i][k]):
+                        # It is a path
+                        b_flag = True
+                        print(NEIGH_add)
+                        print(NEIGH_add[i][j])
+                        print(DESTINATION_ROUTING_table_path)
+                        print(DESTINATION_ROUTING_table_path[i][k])
+                        if (NEIGH_add[i][j] == DESTINATION_ROUTING_table_path[i][k]):
+                            # Now check if it is the chosen path if it is treat according
+                            G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
+                        else:
+                            # Only an available path thus treat according
+                            G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[1], width=Edge_Size[1])
+                if (not b_flag):
+                    # The edge is not a path as such treat according
+                    G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[0], width=Edge_Size[0])
+        except:
+            print("MASSIVE GRAPHING ISSUES")
     return G
 
 def Update_Origin_Graph():
@@ -1213,7 +1232,7 @@ def Update_Origin_Graph():
                 if (NEIGH_add[i][j] in ORIGIN_ROUTING_table_next[i][k]):
                     # It is a path
                     b_flag = True
-                    if (NEIGH_add[i][j] in ORIGIN_ROUTING_table_path[i][k]):
+                    if (NEIGH_add[i][j] == ORIGIN_ROUTING_table_path[i][k]):
                         # Now check if it is the chosen path if it is treat according
                         G.add_edge(NODE_index[i], NEIGH_add[i][j], color=Edge_Color[2], width=Edge_Size[2])
                     else:
@@ -1340,52 +1359,53 @@ def revert_to_backup(BACKUP_NODE_index,BACKUP_NEIGH_add,BACKUP_DEST_add,BACKUP_C
     global NODE_PDR_value
     global NODE_ETX_value
     print("########### Performing Backups Resetting #############")
-    #Take backups as inputs and revert stores variables to old values
+    # Take backups as inputs and revert stores variables to old values
     # Address index corresponds to index of the measured node
-    NODE_index = list(np.copy(BACKUP_NODE_index))
+
+    NODE_index =np.copy(BACKUP_NODE_index).tolist()
     # Store neighbour addresses here
-    NEIGH_add = list(np.copy(BACKUP_NEIGH_add))
+    NEIGH_add = np.copy(BACKUP_NEIGH_add).tolist()
     # Store destination address here
-    DEST_add = list(np.copy(BACKUP_DEST_add))
+    DEST_add =np.copy(BACKUP_DEST_add).tolist()
     # STores client addresses here
-    CLIENT_add = list(np.copy(BACKUP_CLIENT_add))
+    CLIENT_add = np.copy(BACKUP_CLIENT_add).tolist()
     # Stores destination to client adds here
-    DEST_TO_CLIENT_add = list(np.copy(BACKUP_DEST_TO_CLIENT_add))
+    DEST_TO_CLIENT_add = np.copy(BACKUP_DEST_TO_CLIENT_add).tolist()
     # Stores cliebnt to dest adds here
-    CLIENT_TO_DEST_add =list( np.copy(BACKUP_CLIENT_TO_DEST_add))
+    CLIENT_TO_DEST_add =np.copy(BACKUP_CLIENT_TO_DEST_add).tolist()
     # Stores node to destination adds
-    NODE_TO_DEST_add =list( np.copy(BACKUP_NODE_TO_DEST_add))
+    NODE_TO_DEST_add = np.copy(BACKUP_NODE_TO_DEST_add).tolist()
     # Stores node to client adds
-    NODE_TO_CLIENT_add =list( np.copy(BACKUP_NODE_TO_CLIENT_add))
+    NODE_TO_CLIENT_add = np.copy(BACKUP_NODE_TO_CLIENT_add).tolist()
     # Data to be stored defined here
     # Store the loads here
-    LOAD_array =list( np.copy(BACKUP_LOAD_array))
+    LOAD_array =np.copy(BACKUP_LOAD_array).tolist()
     # Store amount of packets sent here
-    PACKETS_sent =list( np.copy(BACKUP_PACKETS_sent))
+    PACKETS_sent = np.copy(BACKUP_PACKETS_sent).tolist()
     # Store amount of packets received here
-    PACKETS_received = list(np.copy(BACKUP_PACKETS_received))
+    PACKETS_received = np.copy(BACKUP_PACKETS_received).tolist()
     # Store the average RSSI of received link rememeber it is signed
-    RSSI_value =list(np.copy(BACKUP_RSSI_value))
+    RSSI_value =np.copy(BACKUP_RSSI_value).tolist()
     # Store the average SNR of received link rememeber this is again unsigned???? makes sure
-    SNR_value = list(np.copy(BACKUP_SNR_value))
+    SNR_value = np.copy(BACKUP_SNR_value).tolist()
     # Stores the routing table next hop entries for each node for a given destination
-    DESTINATION_ROUTING_table_next =list( np.copy(BACKUP_DESTINATION_ROUTING_table_next))
+    DESTINATION_ROUTING_table_next = np.copy(BACKUP_DESTINATION_ROUTING_table_next).tolist()
     # STores the next hop for the chosen path
-    DESTINATION_ROUTING_table_path = list(np.copy(BACKUP_DESTINATION_ROUTING_table_path))
+    DESTINATION_ROUTING_table_path = np.copy(BACKUP_DESTINATION_ROUTING_table_path).tolist()
     # Stores the routing table next hop entries for each node for a given origin
-    ORIGIN_ROUTING_table_next =list( np.copy(BACKUP_ORIGIN_ROUTING_table_next))
+    ORIGIN_ROUTING_table_next =np.copy(BACKUP_ORIGIN_ROUTING_table_next).tolist()
     # STores the next hop for the chosen path
-    ORIGIN_ROUTING_table_path = list(np.copy(BACKUP_ORIGIN_ROUTING_table_path))
+    ORIGIN_ROUTING_table_path = np.copy(BACKUP_ORIGIN_ROUTING_table_path).tolist()
     # Stores the amount of messages packets received per epoch
-    Dest_RX_Amount =list( np.copy(BACKUP_Dest_RX_Amount))
+    Dest_RX_Amount =np.copy(BACKUP_Dest_RX_Amount).tolist()
     # Stores the average PING for received messages
-    Dest_PING_Amount = list(np.copy(BACKUP_Dest_PING_Amount))
+    Dest_PING_Amount = np.copy(BACKUP_Dest_PING_Amount).tolist()
     # Stores the amount of messages sent by client to destination per epoch
-    Client_TX_Amount = list(np.copy(BACKUP_Client_TX_Amount))
+    Client_TX_Amount = np.copy(BACKUP_Client_TX_Amount).tolist()
     # STores the PDR for each link between node x and neighbour y
-    NODE_PDR_value = list(np.copy(BACKUP_NODE_PDR_value))
+    NODE_PDR_value = np.copy(BACKUP_NODE_PDR_value).tolist()
     # Stores the ETX for each link between node x and neighbour y
-    NODE_ETX_value = list(np.copy(BACKUP_NODE_ETX_value))
+    NODE_ETX_value = np.copy(BACKUP_NODE_ETX_value).tolist()
 
 #Reads in standard routing node data
 def rx_Read_Node(ser,loops):
@@ -2690,37 +2710,55 @@ if __name__ == "__main__":
             # plt.grid(True)
             # plt.pause(0.33)
     elif not live:
-        try:
-            # Setup the serial
-            ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_CLIENT + ".")
-        except:
-            print("Could not connect to the device "+COM_PORT_NODE_CLIENT+".")
-            exit()
-        try:
-            # Setup the serial
-            ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
-        except:
-            print("Could not connect to the device "+COM_PORT_NODE_DESTINATION+".")
-            exit()
-        try:
-            # Setup the serial
-            ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE, bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_1 + ".")
-        except:
-            print("Could not connect to the device "+COM_PORT_NODE_1+".")
-            exit()
         header = 0
         #Merely samples the serial at these intervals
+        try:
+            # Setup the serial
+            ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                   bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_1 + ".")
+        except:
+            print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
+            exit()
+        try:
+            # Setup the serial
+            ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                       bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+        except:
+            print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
+            exit()
+        try:
+            # Setup the serial
+            ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                    bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+        except:
+            print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
+            exit()
 
         for i in range(NUM_SAMPLES):
-            if(rx_Read_Client(ser_Client,i) and rx_Read_Dest(ser_Dst,i) and rx_Read_Node(ser_R1,i)):
-                i=i-1
+            flag_got = False #Says if got error
+            #Every time the serial need to be opened then closed again
+            # Now obtain the data
+            if (rx_Read_Client(ser_Client, i) and (not flag_got)):
+                flag_got = True
+            # Now obtain the data
+            if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
+                flag_got = True
+            #Now obtain the data
+            if (rx_Read_Node(ser_R1,i) and (not flag_got)):
+                flag_got = True
+
+            if(flag_got):
+                print("Increase NUM_SAMPLES")
+                NUM_SAMPLES+=1
 
             plt.pause(1/SAMPLING_FREQ)
 
+
         print("########### Starting Plotting Data ###########")
+
         #Print the load data
         print("########### Plotting "+DATATYPE_LIST[0]+" ###########")
         plt.ylabel(DATATYPE_LIST[0])
@@ -2733,6 +2771,8 @@ if __name__ == "__main__":
         for i in range (0,len(NODE_index)):
             legend.append("Node "+str(NODE_index[i]))
         for i in range(0,len(LOAD_array)):
+            while (len(LOAD_array[i])<len(X_axis)):
+                LOAD_array[i].append(0)
             plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
         plt.legend(legend)
         plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
@@ -2759,15 +2799,24 @@ if __name__ == "__main__":
                 legend.append("Neighbour " + str(neigh_add))
                 for k in range(0,len(PACKETS_received[i][j])):
                     #Obtain index of the current neighbour the measurements were received from
-                    node_index = NODE_index.index(neigh_add)
+                    if (neigh_add in NODE_index):
+                        node_index = NODE_index.index(neigh_add)
                     # Obtain index of the current node in the neighbour's neighbour index
-                    my_index = NEIGH_add[node_index].index(NODE_index[i])
-                    #As such the corresponding data received was sent by node_index to my_index
-                    if (PACKETS_sent[node_index][my_index][k]!=0):
-                        PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                    if (NODE_index[i] in NEIGH_add[node_index]):
+                        my_index = NEIGH_add[node_index].index(NODE_index[i])
+                        #As such the corresponding data received was sent by node_index to my_index
+                        try:
+                            if (PACKETS_sent[node_index][my_index][k]!=0):
+                                PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                            else:
+                                PDR_data.append(0)
+                        except:
+                            PDR_data.append(0)
                     else:
                         PDR_data.append(0)
                     #CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                while (len(PDR_data)>len(X_axis)):
+                    PDR_data.pop(-1)
                 plt.plot(X_axis, PDR_data, LINE_COLORS[j])
                 holder.append(PDR_data)
             NODE_PDR_value.append(holder)
@@ -2795,15 +2844,20 @@ if __name__ == "__main__":
                 legend.append("Neighbour " + str(neigh_add))
                 for k in range(0,len(PACKETS_received[i][j])):
                     #Obtain index of the current neighbour the measurements were received from
-                    node_index = NODE_index.index(neigh_add)
-                    # Obtain index of the current node in the neighbour's neighbour index
-                    my_index = NEIGH_add[node_index].index(NODE_index[i])
-                    #As such the corresponding data received was sent by node_index to my_index
-                    #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
-                    if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
-                        CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
-                    else:
+                    try:
+                        node_index = NODE_index.index(neigh_add)
+                        # Obtain index of the current node in the neighbour's neighbour index
+                        my_index = NEIGH_add[node_index].index(NODE_index[i])
+                        #As such the corresponding data received was sent by node_index to my_index
+                        #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                        if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
+                            CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                        else:
+                            CETX_data.append(0)
+                    except:
                         CETX_data.append(0)
+                while (len(CETX_data)> len(X_axis)):
+                    CETX_data.pop(-1)
                 plt.plot(X_axis, CETX_data, LINE_COLORS[j])
                 holder.append(CETX_data)
             NODE_ETX_value.append(holder)
@@ -2823,13 +2877,18 @@ if __name__ == "__main__":
             # Construct legend for this node's data
             legend = []
             for j in range(0,len(RSSI_value[i])):
-                neigh_add = NEIGH_add[i][j]
-                #Define the RSSI holder
-                RSSI_holder = []
-                legend.append("Neighbour " + str(neigh_add))
-                for k in range(0,len(RSSI_value[i][j])):
-                    RSSI_holder.append(RSSI_value[i][j][k])
-                plt.plot(X_axis, RSSI_holder, LINE_COLORS[j])
+                try:
+                    neigh_add = NEIGH_add[i][j]
+                    #Define the RSSI holder
+                    RSSI_holder = []
+                    legend.append("Neighbour " + str(neigh_add))
+                    for k in range(0,len(RSSI_value[i][j])):
+                        RSSI_holder.append(RSSI_value[i][j][k])
+                    while(len(RSSI_holder)>len(X_axis)):
+                        RSSI_holder.pop(-1)
+                    plt.plot(X_axis, RSSI_holder, LINE_COLORS[j])
+                except:
+                    print("#### ERROR IN RSSI #######")
             plt.legend(legend)
             plt.savefig(test_array[current_test] + measurement_array[3] + "_for_node_"+str(NODE_index[i])+".pdf")
             plt.show()
@@ -2846,13 +2905,18 @@ if __name__ == "__main__":
             # Construct legend for this node's data
             legend = []
             for j in range(0,len(SNR_value[i])):
-                neigh_add = NEIGH_add[i][j]
-                #Define the RSSI holder
-                SNR_holder = []
-                legend.append("Neighbour " + str(neigh_add))
-                for k in range(0,len(SNR_value[i][j])):
-                    SNR_holder.append(SNR_value[i][j][k])
-                plt.plot(X_axis, SNR_holder, LINE_COLORS[j])
+                try:
+                    neigh_add = NEIGH_add[i][j]
+                    #Define the RSSI holder
+                    SNR_holder = []
+                    legend.append("Neighbour " + str(neigh_add))
+                    for k in range(0,len(SNR_value[i][j])):
+                        SNR_holder.append(SNR_value[i][j][k])
+                    while(len(SNR_holder)>len(X_axis)):
+                        SNR_holder.pop(-1)
+                    plt.plot(X_axis, SNR_holder, LINE_COLORS[j])
+                except:
+                    print("########### ERROR AT SNR #########")
             plt.legend(legend)
             plt.savefig(test_array[current_test] + measurement_array[4] + "_for_node_"+str(NODE_index[i])+".pdf")
             plt.show()
@@ -2875,7 +2939,10 @@ if __name__ == "__main__":
                 legend.append("Client " + str(client_add))
                 for k in range(0,len(Dest_RX_Amount[i][j])):
                     RX_holder.append(Dest_RX_Amount[i][j][k])
+                while(len(RX_holder)<len(X_axis)):
+                    RX_holder.append(0)
                 plt.plot(X_axis, RX_holder, LINE_COLORS[j])
+
             plt.legend(legend)
             plt.savefig(test_array[current_test] + measurement_array[5] + "_for_destination_"+str(DEST_add[i])+".pdf")
             plt.show()
@@ -2897,7 +2964,7 @@ if __name__ == "__main__":
                 PING_holder = []
                 legend.append("Client " + str(client_add))
                 for k in range(0,len(Dest_PING_Amount[i][j])):
-                    PING_holder.append(Dest_PING_Amount[i][j][k]/CLOCKS_PER_SEC*1000)
+                    PING_holder.append(Dest_PING_Amount[i][j][k])
                 plt.plot(X_axis, PING_holder, LINE_COLORS[j])
             plt.legend(legend)
             plt.savefig(test_array[current_test] + measurement_array[6] + "_for_destination_"+str(DEST_add[i])+".pdf")
