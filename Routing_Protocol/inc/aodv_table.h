@@ -148,7 +148,6 @@ public:
 
     void SetNextHop (uint8_t nextHop)
     {
-        std::cout<<"Next hop being set to "<<nextHop<<endl;
         RouteEntity holder = RouteEntity( nextHop,  1);
         if (m_route_list.size()>0)
         {
@@ -156,17 +155,14 @@ public:
          {
             if( m_route_list.at(i).get_next_hop()==nextHop)
             {
-                std::cout<<"Hop "<<holder.get_next_hop()<<" exhists in line 157"<<endl;
                 return;
                 }
             
             }   
-            std::cout<<"Pushing back "<<holder.get_next_hop()<<" in line 161"<<endl;
             m_route_list.push_back(holder);
             }
             else
             {
-                std::cout<<"Pushing back "<<holder.get_next_hop()<<" in line 166"<<endl;
                 m_route_list.push_back(holder);
                 }
         //Assuming made here it is new hop look at smallest hop best
@@ -176,7 +172,6 @@ public:
           if  (m_LoRa_route.GetNextHop()>m_route_list.at(i).get_next_hop())
           {
             //This is smaller so make this next hop
-            std::cout<<"Smallest hop set "<<m_route_list.at(i).get_next_hop()<<" in line 166"<<endl;
             m_LoRa_route.SetNextHop(m_route_list.at(i).get_next_hop());
             }
         }  
@@ -186,10 +181,8 @@ public:
     {
         if (m_route_list.size()>index)
         {
-            std::cout<<"Next hop being returned is  "<<m_route_list.at(index).get_next_hop()<<endl;
          return  m_route_list.at(index).get_next_hop();   
             }
-        std::cout<<"No entries exist"<<endl;
         return 0;
         
     }

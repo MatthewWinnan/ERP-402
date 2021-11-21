@@ -11,6 +11,8 @@
 //TODO check if my neighbour table works with my hallo timer properly
 
 #include "aodv_main.h"
+#include <map>
+#include <utility>
 
 #if ACTIVE_VERSION == AODV
 #include <algorithm>
@@ -30,7 +32,7 @@ int main() {
     uint8_t tx_power;
     uint8_t frequency_band;
 
-    pc.baud(9600);
+    pc.baud(115200);
     
     // Setup a serial interrupt function to receive data
     pc.attach(&Rx_interrupt, UnbufferedSerial::RxIrq);
@@ -51,7 +53,7 @@ int main() {
     dot->resetConfig();
 
     // make sure library logging is turned on
-    dot->setLogLevel(mts::MTSLog::INFO_LEVEL);
+    dot->setLogLevel(mts::MTSLog::NONE_LEVEL);
 
     // attach the custom events handler
     dot->setEvents(&events);
@@ -98,7 +100,10 @@ int main() {
     start();
 //Function that broadcasts hallo message in order to obtain all neighbours
     obtain_neighbours();
-        
+    //Set counter to repeat a phrase. The packet weight will stay the same
+    //May the Force be with you
+    const char my_phrase[24] = {'M','a','y','t','h','e','f','o','r','c','e','b','e','w','i','t','h','y','o','u','L','u','k','e'};
+    int monitor = 0;
     while (true) {
         std::vector<uint8_t> tx_data;
 
@@ -109,18 +114,29 @@ int main() {
         
         
         #if ACTIVE_USER == CLIENT_NODE
-            //Client thus it will take things from serial input and forward it to the needed route if it exhists
-                   if (rx_bit){
-           logInfo("waiting for 200ms so rx buffer is empty");
-           ThisThread::sleep_for(200ms);
-           
-           // get some dummy data and send it to the gateway
-           for (int i =0; i<rx_in ; i= i+1) {
-               tx_data.push_back(rx_buffer[i]);
-               } 
             uint8_t type = 6;
-
-            tx_data.insert(tx_data.begin(),0);
+            ThisThread::sleep_for(PACKET_RATE);
+            uint8_t data_send = 200;
+            clock_t start_clk = clock(); //Value when packet was generated
+            uint32_t start_clk_32 = (uint32_t) start_clk; //cast to 32 bits
+            //Insertting data to fill up until 20 bytes
+            if (monitor>5)
+            {
+                monitor = 0;
+                }
+            
+            tx_data.push_back(my_phrase[monitor*4]);
+            tx_data.push_back(my_phrase[monitor*4+1]);
+            tx_data.push_back(my_phrase[monitor*4+2]);
+            tx_data.push_back(my_phrase[monitor*4+3]);
+            monitor++;
+            //Unpacking clock to be able to send over the LoRa channel
+            tx_data.push_back(start_clk_32 & 0xff);
+            tx_data.push_back((start_clk_32 >> 8) & 0xff);
+            tx_data.push_back((start_clk_32 >> 16) & 0xff);
+            tx_data.push_back((start_clk_32 >> 24) & 0xff);
+            //Generate testing packet to be sent
+            tx_data.insert(tx_data.begin(),0);//TTL
             tx_data.insert(tx_data.begin(),destination_ip_address);
             tx_data.insert(tx_data.begin(),device_ip_address);
             tx_data.insert(tx_data.begin(),device_ip_address);
@@ -131,9 +147,9 @@ int main() {
            if(!message_request_queue.Enqueue(newEntry))
            {
            }
-           rx_bit = 0;
-           rx_in = 0;
-       }
+           else
+           {
+           }
         #endif
 
     }
@@ -154,23 +170,28 @@ void start()
         m_rreqCount = 0;
         m_rerrCount = 0;
         m_neighbourCount = 0;
+        tx_sent = 0;
         //////////////////////////////////////
     ///Here is the main event specifiers//
     //////////////////////////////////////
+
     //HERE WE SEE WHO IS WHAT AND INITIALIZE THE TIMERS BASED ON THAT
     #if ACTIVE_USER == DESTINATION_NODE
+        Simulation_t.attach(&Queue_Simulation_Timer_Expire, RESULTS_TIMER);
         //Destination has no need of RREQ
-        h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
-        routing_t.attach(&queue_request_queue_handler,1s);
-        message_t.attach(&queue_message_handler,1s);
-        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
-        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        h_timer.attach(&Queue_Hallo_Timer_Expire, HALLO_INTERVAL);
+        routing_t.attach(&queue_request_queue_handler,ROUTING_QUEUE_INTERVAL);
+        message_t.attach(&queue_message_handler,MESSAGE_QUEUE_INTERVAL);
+        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,RREQ_RATE_TIMER_INTERVAL);
+        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,RRER_RATE_TIMER_INTERVAL);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
         main_queue.event(request_queue_handler);
         main_queue.event(message_queue_handler);
+        main_queue.event(Simulation_Timer_Expire);
     #elif ACTIVE_USER == ROUTING_NODE
+        Simulation_t.attach(&Queue_Simulation_Timer_Expire, RESULTS_TIMER);
         //Assigning random unique address
         //255 is reserved as wild card as such can't be that number. Further 20 and 100 is reserved
         while ((device_ip_address==0)||(device_ip_address==20)||(device_ip_address==100))
@@ -178,31 +199,34 @@ void start()
             //as long not 0,20,100 then keep this else reassign
             device_ip_address = RNG.getByte() % 200; 
         }
-        rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
-        h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
-        routing_t.attach(&queue_request_queue_handler,1s);
-        message_t.attach(&queue_message_handler,1s);
-        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
-        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        rreq_t.attach(&QueueRouteRequestTimerExpire,ROUTE_REQUEST_TIMER);
+        h_timer.attach(&Queue_Hallo_Timer_Expire, HALLO_INTERVAL);
+        routing_t.attach(&queue_request_queue_handler,ROUTING_QUEUE_INTERVAL);
+        message_t.attach(&queue_message_handler,MESSAGE_QUEUE_INTERVAL);
+        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,RREQ_RATE_TIMER_INTERVAL);
+        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,RRER_RATE_TIMER_INTERVAL);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
         main_queue.event(request_queue_handler);
         main_queue.event(RouteRequestTimerExpire);
         main_queue.event(message_queue_handler);
+        main_queue.event(Simulation_Timer_Expire);
     #elif ACTIVE_USER == CLIENT_NODE
-        rreq_t.attach(&QueueRouteRequestTimerExpire,4s);
-        h_timer.attach(&Queue_Hallo_Timer_Expire, 10s);
-        routing_t.attach(&queue_request_queue_handler,1s);
-        message_t.attach(&queue_message_handler,1s);
-        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,1s);
-        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,1s);
+        Simulation_t.attach(&Queue_Simulation_Timer_Expire, RESULTS_TIMER);
+        rreq_t.attach(&QueueRouteRequestTimerExpire,ROUTE_REQUEST_TIMER);
+        h_timer.attach(&Queue_Hallo_Timer_Expire, HALLO_INTERVAL);
+        routing_t.attach(&queue_request_queue_handler,ROUTING_QUEUE_INTERVAL);
+        message_t.attach(&queue_message_handler,MESSAGE_QUEUE_INTERVAL);
+        rreq_rate_timer.attach(&RreqRateLimitTimerExpire,RREQ_RATE_TIMER_INTERVAL);
+        rrer_rate_timer.attach(&RrerRateLimitTimerExpire,RRER_RATE_TIMER_INTERVAL);
         //        //Start the queue threads
         main_thread.start(callback(&main_queue, &EventQueue::dispatch_forever));
         main_queue.event(Hallo_Timer_Expire);
         main_queue.event(request_queue_handler);
         main_queue.event(RouteRequestTimerExpire);
         main_queue.event(message_queue_handler);
+        main_queue.event(Simulation_Timer_Expire);
         //FOR NOW SINCE TESTING SEND A RREQ STRAIGHT
         // send_rreq(destination_ip_address); 
     #endif  
@@ -570,6 +594,8 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
            packet.at(RRER_PACKET_RECIPIENT) = precursors.front ();
            packet.at(RRER_PACKET_SENDER) = device_ip_address;
            m_rerrCount++;
+           tx_sent++;
+           update_tx_neighbour( precursors.front ());
            send_data(packet);
          }
        return;
@@ -593,6 +619,8 @@ void SendRerrMessage(std::vector<uint8_t> packet, std::vector< uint8_t > precurs
         m_rerrCount++;
         logInfo("Preparing to send RRER to: TODO add address detail");
         ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
+        tx_sent++;
+        update_tx_neighbour(*i);
         send_data(packet);
      } 
     }  
@@ -630,10 +658,15 @@ bool forward_message(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
            RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
            m_routing_table.LookupRoute (origin, toOrigin);
            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-  
+            //std::cout<<" Adding "<<route.GetNextHop ()<<" to neighbour line 653"<<endl;
+            
            myNeighbour.Update (route.GetNextHop (), ACTIVE_ROUTE_TIMEOUT);
-           myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-            logInfo("Sending Packet Forward TODO choosing path load etc");
+           if (device_ip_address != client_ip_address)
+           {
+            //std::cout<<" Adding "<<toOrigin.GetNextHop (0)<<" to neighbour line 654"<<endl;
+            myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
+               }
+            //std::cout<<"Sending Packet Forward to "<<dst<<" via "<< route.GetNextHop ()<<endl;
             send_message_data(route.GetNextHop (), device_ip_address, origin, dst,0, p);
            return true;
          }
@@ -684,16 +717,31 @@ bool Route_Input(std::vector<uint8_t> p, uint8_t dst, uint8_t origin)
    // Checks if this node is the destination
    if (dst == device_ip_address)
      {
+       //std::cout<<"I am dest and received"<<endl;
        UpdateRouteLifeTime (origin, ACTIVE_ROUTE_TIMEOUT);
        RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
        if (m_routing_table.LookupValidRoute (origin, toOrigin))
          {
            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
+           //std::cout<<" Adding "<<toOrigin.GetNextHop (0)<<" to neighbour line 714"<<endl;
            myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
-           for (std::vector<uint8_t>::const_iterator i = p.begin (); i != p.end (); ++i)
-           {
-           }
          }
+        else if (m_routing_table.LookupValidRoute (origin, toOrigin))
+        {
+            UpdateRouteLifeTime (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
+           //std::cout<<" Adding "<<toOrigin.GetNextHop (0)<<" to neighbour line 714"<<endl;
+           myNeighbour.Update (toOrigin.GetNextHop (0), ACTIVE_ROUTE_TIMEOUT);
+           m_routing_table.SetEntryState(origin,VALID);
+            }
+        //Destination received the packet
+        #if ACTIVE_USER == DESTINATION_NODE
+        update_PING_client(p);
+        update_rx_client(p.at(MESSAGE_PACKET_ORIGIN));
+        if (SHOW_MY_MESSAGE)
+        {
+         std::cout<<p.at(SECRET_MESSAGE_ONE)<<p.at(SECRET_MESSAGE_TWO)<<p.at(SECRET_MESSAGE_THREE)<<p.at(SECRET_MESSAGE_FOUR)<<endl;  
+            }
+        #endif
        return true;
      }
   
@@ -780,6 +828,7 @@ void ProcessHello(std::vector<uint8_t> packet)
      }
    if (ENABLE_HALLO)
      {
+       //std::cout<<" Adding "<<packet.at(RREP_PACKET_DESTINATION_IP)<<" to neighbour line 808"<<endl;
        myNeighbour.Update (packet.at(RREP_PACKET_DESTINATION_IP),HELLO_INTERVAL*ALLOWED_HELLO_LOSS*CLOCKS_PER_SEC);
      }
     myNeighbour.Print();
@@ -866,6 +915,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
             toOrigin.SetLifeTime (toOrigin.GetLifeTime ()-clock());
             }
        m_routing_table.Update (toOrigin);
+       //std::cout<<" Adding "<< source <<" to neighbour line 895"<<endl;
        myNeighbour.Update (source,CLOCKS_PER_SEC/1000*ALLOWED_HELLO_LOSS*HELLO_INTERVAL);
      }
   
@@ -891,7 +941,7 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
        toNeighbor.SetNextHop (source);
        m_routing_table.Update (toNeighbor);
      }
-     
+    //std::cout<<" Adding "<<origin<<" to neighbour line 921"<<endl;
    myNeighbour.Update (origin, HELLO_TIME_OUT*CLOCKS_PER_SEC/1000);
 //  
 //   NS_LOG_LOGIC (receiver << " receive RREQ with hop count " << static_cast<uint32_t> (rreqHeader.GetHopCount ())
@@ -973,6 +1023,8 @@ void receive_rreq(std::vector<uint8_t> packet,  uint8_t source)
            if(m_rerrCount<RREQ_RATELIMIT)
            {
                m_rreqCount++;
+               tx_sent++;
+               update_tx_neighbour(current_neighbours.at(i).m_neighborAddress);
                send_data(packet);
            }
             ThisThread::sleep_for(TX_NEXT_WAIT);//Wait not to flood network
@@ -1119,6 +1171,8 @@ void receive_rrep(std::vector<uint8_t> packet, uint8_t my, uint8_t src)
     packet.at(RREP_PACKET_TTL) = ttl_m - 1;
     packet.at(RREP_PACKET_SENDER) = device_ip_address;
     packet.at(RREP_PACKET_RECIPIENT) = toOrigin.GetNextHop (0);
+    tx_sent++;
+    update_tx_neighbour(toOrigin.GetNextHop (0));
     send_data(packet); //Sending rewply back to origin
     }    
  
@@ -1281,14 +1335,14 @@ void request_queue_handler(void)
 
                         #if ACTIVE_USER == DESTINATION_NODE
                             //I want to ignore my client node
-                            if (packet.at(RREQ_SENDER)!=20)
+                            if ((packet.at(RREQ_SENDER)!=20) && (packet.at(RREQ_SENDER)!=0))
                             {
                                 //not the client so this is fine
                                 logInfo("RREQ has been received by node");
                                 receive_rreq(packet,packet.at(RREQ_SENDER));
                             }
                         #elif ACTIVE_USER == CLIENT_NODE
-                            if (packet.at(RREQ_SENDER)!=100)
+                            if ((packet.at(RREQ_SENDER)!=100) && (packet.at(RREQ_SENDER)!=0) )
                             {
                                 //not the client so this is fine
                                 logInfo("RREQ has been received by node");
@@ -1296,15 +1350,18 @@ void request_queue_handler(void)
                             }
                         #else
                             //Packet is for me
+                        if (packet.at(RREQ_SENDER)!=0)
+                        {
                         logInfo("RREQ has been received by node");
                         receive_rreq(packet,packet.at(RREQ_SENDER));
+                            }
                         #endif
 
                         }
                         break;
                     case ROUTE_REPLY:
                         //Handle RREP messages
-                        if ((packet.at(RREP_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RREP_PACKET_RECIPIENT)==255))
+                        if ((packet.at(RREP_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RREP_PACKET_RECIPIENT)==255) && (packet.at(RREP_PACKET_RECIPIENT)!=0))
                         {
                             //This is for me
                             logInfo("Got a RREP packet");
@@ -1313,7 +1370,7 @@ void request_queue_handler(void)
                         break;
                     case ROUTE_ERROR:
                         //Handle RERR Messages
-                        if ((packet.at(RREP_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RREP_PACKET_RECIPIENT)==255))
+                        if ((packet.at(RRER_PACKET_RECIPIENT)==device_ip_address) || (packet.at(RRER_PACKET_RECIPIENT)==255) && (packet.at(RRER_PACKET_RECIPIENT)!=0) )
                         {
                             receive_rrer(packet,packet.at(RRER_PACKET_SENDER));
                         }
@@ -1324,21 +1381,24 @@ void request_queue_handler(void)
                     case HALLO_MESSAGE:
                         #if ACTIVE_USER == DESTINATION_NODE
                             //I want to ignore my client node
-                            if (packet.at(RREP_PACKET_SENDER)!=20)
+                            if ((packet.at(RREP_PACKET_SENDER)!=20) && (packet.at(RREP_PACKET_SENDER)!=0) )
                             {
                                 //not the client so this is fine
                         ProcessHello(packet);
                             }
                         #elif ACTIVE_USER == CLIENT_NODE
-                            if (packet.at(RREP_PACKET_SENDER)!=100)
+                            if ((packet.at(RREP_PACKET_SENDER)!=100) && (packet.at(RREP_PACKET_SENDER)!=0) )
                             {
                                 //not the client so this is fine
                         ProcessHello(packet);
                             }                            
                         #else
                             //Packet is for me
-                        logInfo("Got a hello message");
+                            if (packet.at(RREP_PACKET_SENDER)!=0)
+                            {
+                                                        logInfo("Got a hello message");
                         ProcessHello(packet);
+                                }
                         #endif
                         break;
                     default:
@@ -1383,23 +1443,41 @@ void message_queue_handler(void)
             //Dequed fine
             if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
             {
+                //std::cout<<"I am dest and received"<<endl;
             }
             else
             {
+                //std::cout<<"I am dest and failed"<<endl;
             }                
             }
             else {
+               // std::cout<<"I am dest and wrong address, sender was "<<handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" and recipient was "<<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<< endl;
             }
         }
         else
         {
+           // std::cout<<"No deqeue"<<endl;
         }
 
-    #elif ACTIVE_USER == ROUTING_NODE   
-        if(message_request_queue.DequeueFront(handleRequest))
+    #elif ACTIVE_USER == ROUTING_NODE  
+            //First check if route has been made 
+        std::vector<RouteEntity> route_list;
+        RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+        if(!m_routing_table.LookupRoute (destination_ip_address, toDst))
         {
-            if (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address)
+            //Not in the routing table. So send rreq
+            send_rreq(destination_ip_address);
+            } 
+        else
             {
+                            //check the route status-+
+            if (toDst.GetFlag()==VALID)
+            {
+                //routte exhists so forward
+                if(message_request_queue.Dequeue(destination_ip_address, handleRequest))
+                {
+            if (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address)
+                {
                     //Dequed fine
                     if (Route_Input(handleRequest.GetPacket(),handleRequest.GetPacket().at(MESSAGE_PACKET_DESTINATION),handleRequest.GetPacket().at(MESSAGE_PACKET_ORIGIN)))
                     {
@@ -1410,10 +1488,19 @@ void message_queue_handler(void)
             }
             else {
             }
-        }
-        else
-        {
-        }
+
+                }
+                else {
+                    //std::cout<<"DEQUEUE failure "<<endl;
+                }
+
+            }
+            else
+            {
+                //std::cout<<"Destination flag is  "<< toDst.GetFlag()<<endl;
+                }
+                
+            }
     #elif ACTIVE_USER == CLIENT_NODE
         //First check if route has been made 
         std::vector<RouteEntity> route_list;
@@ -1430,22 +1517,28 @@ void message_queue_handler(void)
                 //routte exhists so forward
                 if(message_request_queue.Dequeue(destination_ip_address, handleRequest))
                 {
-                    if ((handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)==255) || (handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==device_ip_address))
+                    if ((handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)==255) || (handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)==device_ip_address))
                     {
                     //Successfully dequed packet
-                    logInfo("Calling function forward_message line 1453");
+                    //std::cout<<"Calling function forward_message line 1453"<<endl;
                     forward_message(handleRequest.GetPacket(),destination_ip_address,device_ip_address);
+                    update_tx_client(destination_ip_address);
                     }
                     else
                     {
-                <<handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
+                        //std::cout<<"If failed sender was "<< handleRequest.GetPacket().at(MESSAGE_PACKET_SENDER)<<" and recipient was "<< handleRequest.GetPacket().at(MESSAGE_PACKET_RECIPIENT)<<endl;
                     }
 
                 }
                 else {
+                    //std::cout<<"DEQUEUE failure "<<endl;
                 }
 
             }
+            else
+            {
+                //std::cout<<"Destination flag is  "<< toDst.GetFlag()<<endl;
+                }
         }
     #endif
     }
@@ -1504,6 +1597,8 @@ int send_rreq(uint8_t recipient_address, uint8_t sender_address, uint8_t source_
             output.push_back(r_ack);
             //wait for the radio to be done
             wait_on_radio();
+            tx_sent++;
+            update_tx_neighbour(recipient_address);
             return send_data(output);
         } 
         else {
@@ -1547,6 +1642,8 @@ int send_rrep(uint8_t recipient_add,uint8_t sender_address, uint8_t source_add, 
     output.push_back(r_ack);
     //wait for the radio to be done
     wait_on_radio();
+    update_tx_neighbour(recipient_add);
+    tx_sent++;
     return send_data(output);
     
     
@@ -1610,6 +1707,8 @@ int send_rrer(uint8_t recipient_add, uint8_t sender_address, uint8_t N, uint8_t 
                 }
             //wait for the radio to be done
             wait_on_radio();
+            tx_sent++;
+            update_tx_neighbour(recipient_add);
             return send_data(output);
         }
         else
@@ -1638,6 +1737,8 @@ int send_ack(uint8_t recipient_address, uint8_t sender_address, uint8_t ttl)
     output.push_back(ttl);
     //wait for the radio to be done
     wait_on_radio();
+    tx_sent++;
+    update_tx_neighbour(recipient_address);
     return send_data(output);
     }  
     
@@ -1685,6 +1786,13 @@ int send_hallo(uint8_t recipient_add, uint8_t sender_address, uint8_t source_add
     output.push_back(r_ack);
     //wait for the radio to be done
     wait_on_radio();
+    tx_sent++;
+    //Here a simple update won't suffice need to update every neighbour address
+    std::vector<Neighbors::Neighbor> current_neighbours = myNeighbour.getListNeighbours();
+    for (int i = 0; i < current_neighbours.size(); i++)
+    {
+        update_tx_neighbour(current_neighbours.at(i).m_neighborAddress);
+    }
     return send_data(output);
     
     }
@@ -1708,8 +1816,12 @@ int send_message_data(uint8_t recipient_address, uint8_t sender_address,uint8_t 
     packet.at(MESSAGE_PACKET_SENDER) = sender_address;
     packet.at(MESSAGE_PACKET_RECIPIENT) = recipient_address;
     packet.at(MESSAGE_PACKET_TYPE) = type;
+    uint32_t start_clock = (packet.at(MESSAGE_TIME_FOUR) << 24) | (packet.at(MESSAGE_TIME_THREE) << 16) | (packet.at(MESSAGE_TIME_TWO) << 8) | packet.at(MESSAGE_TIME_ONE);
+    //std::cout<<"I am "<< device_ip_address<< " the message was made at "<<start_clock<<endl;
     //wait for the radio to be done
     wait_on_radio();
+    tx_sent++;
+    update_tx_neighbour(packet.at(MESSAGE_PACKET_RECIPIENT));
     return send_data(packet);
 }
 
@@ -1934,5 +2046,376 @@ void Hallo_Timer_Expire()
         }
 
     }
+
+
+void Simulation_Timer_Expire()
+{
+    //Send out the needed measurements
+    //Send the current load
+    //['S','T','Routing node address','L','D','Current load','\n']
+    uint16_t load = tx_sent+m_rx_count;
+    uint8_t my_load[2];
+    uint16_2uint8_t(my_load,load);
+    for (int i = 0;i<2;i++)
+    {
+        if ((my_load[i]==13) ||(my_load[i]==10) )
+        {
+            my_load[i]++;
+            }
+        }
+    std::cout<<"ST"<<device_ip_address<<"LD"<<( unsigned char)my_load[1]<<( unsigned char)my_load[0]<<endl;
+    //This packet is always 2 bytes
+    //Send the packet tx amounts
+    //['Routing node address','N','D','Neighbour destination','P','S','Amount of Packets sent','R','A'........,'\n'],
+    std::map<uint8_t, uint16_t>::iterator itr;
+    uint8_t my_ps[2];
+    if (!tx_neighbour.empty())
+    {
+        for (itr = tx_neighbour.begin(); itr!= tx_neighbour.end(); ++itr)
+        {
+            if (std::next(itr) != tx_neighbour.end())
+            {
+                //Check that bytes are not endl or 10
+                uint16_2uint8_t(my_ps,itr->second);
+                for (int i = 0;i<2;i++)
+                {
+                    if ((my_ps[i]==13) ||(my_ps[i]==10) )
+                    {
+                        my_ps[i]++;
+                        }
+                    }
+                    
+                std::cout<<device_ip_address<<"ND"<<itr->first<<"PS"<<( unsigned char)my_ps[1]<<( unsigned char)my_ps[0]<<"RA";
+            }
+            else {
+                //Check that bytes are not endl or 10
+                uint16_2uint8_t(my_ps,itr->second);
+                for (int i = 0;i<2;i++)
+                {
+                    if ((my_ps[i]==13) ||(my_ps[i]==10) )
+                    {
+                        my_ps[i]++;
+                        }
+                    }
+                    
+                std::cout<<device_ip_address<<"ND"<<itr->first<<"PS"<<( unsigned char)my_ps[1]<<( unsigned char)my_ps[0]<<endl;
+            }
+        }
+    }
+    else {
+        std::cout<<device_ip_address<<"ND"<<device_ip_address<<"PS"<<(uint8_t)(0)<<(uint8_t)(0)<<endl;
+    }
+    //Send the packet rx amounts
+    //This data is always two bytes
+    //['Routing node address','N','S','Neighbour source','P','R','Amount of Packets received','R','A'........,'\n'],
+    uint8_t my_pr[2];
+    if (! neighbour_rx.empty())
+    {
+        for (itr = neighbour_rx.begin(); itr!= neighbour_rx.end(); ++itr)
+        {
+            if (std::next(itr) != neighbour_rx.end())
+            {
+                //Check that bytes are not endl or 10
+                uint16_2uint8_t(my_pr,itr->second);
+                for (int i = 0;i<2;i++)
+                {
+                    if ((my_pr[i]==13) ||(my_pr[i]==10) )
+                    {
+                        my_pr[i]++;
+                        }
+                    }
+                    
+                std::cout<<device_ip_address<<"NS"<<itr->first<<"PR"<<( unsigned char)my_pr[1]<<( unsigned char)my_pr[0]<<"RA";
+                
+                }
+            else {
+                //Check that bytes are not endl or 10
+                uint16_2uint8_t(my_pr,itr->second);
+                for (int i = 0;i<2;i++)
+                {
+                    if ((my_pr[i]==13) ||(my_pr[i]==10) )
+                    {
+                        my_pr[i]++;
+                        }
+                    }
+                    
+                std::cout<<device_ip_address<<"NS"<<itr->first<<"PR"<<( unsigned char)my_pr[1]<<( unsigned char)my_pr[0]<<endl;
+            }
+        }
+    }
+    else {
+    std::cout<<device_ip_address<<"NS"<<device_ip_address<<"PR"<<(uint8_t)(0)<<"PR"<<(uint8_t)(0)<<endl;
+    }
+
+    //Sendijng link RSSI values
+    //['Routing node address','N','S','Neighbour source','R','I','RSSI measurement','R','A'........,'\n'],
+    //This measurement is always 2 bytes
+    std::map<uint8_t, int16_t>::iterator itr_RSSI;
+    unsigned char my_RSSI[2];
+    if (!neighbour_RSSI.empty() )
+    {
+        for (itr_RSSI = neighbour_RSSI.begin(); itr_RSSI!= neighbour_RSSI.end(); ++itr_RSSI)
+        {
+            if (std::next(itr_RSSI) != neighbour_RSSI.end())
+            {
+                uint16_2Bytes(my_RSSI,itr_RSSI->second);
+                std::cout<<device_ip_address<<"NS"<<itr_RSSI->first<<"RI"<<my_RSSI[1]<<my_RSSI[0]<<"RA";
+            }
+            else {
+                uint16_2Bytes(my_RSSI,itr_RSSI->second);
+            std::cout<<device_ip_address<<"NS"<<itr_RSSI->first<<"RI"<<my_RSSI[1]<<my_RSSI[0]<<endl;
+            }
+        }
+    }
+    else {
+        std::cout<<device_ip_address<<"NS"<<device_ip_address<<"RI"<<(uint8_t)(0)<<"RI"<<(uint8_t)(0)<<endl;
+    }
+    //Sending link SNR values
+    //This measurement is always one byte
+    //['Routing node address','N','S','Neighbour source','S','N','SNR measurement','R','A'........,'\n'],
+    std::map<uint8_t, uint8_t>::iterator itr_SNR;
+    if (!neighbour_SNR.empty())
+    {
+        for (itr_SNR = neighbour_SNR.begin(); itr_SNR!= neighbour_SNR.end(); ++itr_SNR)
+        {
+            if (std::next(itr_SNR) != neighbour_SNR.end())
+            {
+                std::cout<<device_ip_address<<"NS"<<itr_SNR->first<<"SN"<<( unsigned char)itr_SNR->second<<"RA";
+            }
+            else {
+            std::cout<<device_ip_address<<"NS"<<itr_SNR->first<<"SN"<<( unsigned char)itr_SNR->second<<endl;
+            }
+        }   
+    }
+    else {
+    std::cout<<device_ip_address<<"NS"<<device_ip_address<<"SN"<<(uint8_t)(0)<<endl;
+    }
+    //Sending table info for the route to destinastion
+    //['Routing node address','D','A','Destination address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n'],
+    std::vector<RouteEntity> route_list;
+    RoutingTableEntry toDst = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+    if(m_routing_table.LookupRoute (destination_ip_address, toDst))
+    {
+        //The destination exhists
+        LoRaRoute m_LoRa_route = toDst.GetRoute();
+        uint8_t chosen_next_hop = m_LoRa_route.GetNextHop();//Chosen route obtained
+        std::vector<RouteEntity> routing_list =  toDst.getRouteList();//List of routes obtained
+        for (int i = 0; i<routing_list.size();i++)
+        {
+            if (i<routing_list.size()-1)
+            {
+                std::cout<<device_ip_address<<"DA"<<destination_ip_address<<"CP"<<chosen_next_hop<<"TE"<<routing_list.at(i).get_next_hop()<<"RA";
+            }
+            else {
+            std::cout<<device_ip_address<<"DA"<<destination_ip_address<<"CP"<<chosen_next_hop<<"TE"<<routing_list.at(i).get_next_hop()<<endl;
+            }
+        }
+    }    
+    else {
+    //Does not exhist this entry
+    //Just send route to self then
+    std::cout<<device_ip_address<<"DA"<<destination_ip_address<<"CP"<<device_ip_address<<"TE"<<device_ip_address<<endl;
+    }
+
+    //Sending table info for the route to origin
+    //['Routing node address','O','A','Origin address','C','P', 'Next hop address','T','E','Next hop address','R','A'........, '\n']
+    std::vector<RouteEntity> route_list_origin;
+    RoutingTableEntry toOrigin = RoutingTableEntry(destination_ip_address,m_sequence,0,route_list_origin,MY_ROUTE_TIMEOUT*CLOCKS_PER_SEC/1000,device_ip_address);
+    if(m_routing_table.LookupRoute (client_ip_address, toOrigin))
+    {
+        //The destination exhists
+        LoRaRoute m_LoRa_route = toOrigin.GetRoute();
+        uint8_t chosen_next_hop = m_LoRa_route.GetNextHop();//Chosen route obtained
+        std::vector<RouteEntity> routing_list =  toOrigin.getRouteList();//List of routes obtained
+        for (int i = 0; i<routing_list.size();i++)
+        {
+            if (i<routing_list.size()-1)
+            {
+                std::cout<<device_ip_address<<"OA"<<client_ip_address<<"CP"<<chosen_next_hop<<"TE"<<routing_list.at(i).get_next_hop()<<"RA";
+            }
+            else {
+            std::cout<<device_ip_address<<"OA"<<client_ip_address<<"CP"<<chosen_next_hop<<"TE"<<routing_list.at(i).get_next_hop()<<endl;
+            }
+        }
+    }    
+    else {
+    //Does not exhist this entry
+    //Just send route to self then
+    std::cout<<device_ip_address<<"OA"<<device_ip_address<<"CP"<<device_ip_address<<"TE"<<device_ip_address<<endl;
+    }
+    //########## BASIC MEASUREMENTS DONE NOW UP TO THE SPECIFIC MEASUREMENTS ###########################
+    #if ACTIVE_USER == CLIENT_NODE
+    //Sending tx data rate
+    //['Source node address','D','A','Destination Address','M','S','Amount of messages sent','R','A',..........,'\n']
+    std::map<uint8_t, uint8_t>::iterator itr_client_tx;
+    //This measurement is always one byte
+    if (!client_tx.empty())
+    {
+    for (itr_client_tx = client_tx.begin(); itr_client_tx!= client_tx.end(); ++itr_client_tx)
+    {
+        if (std::next(itr_client_tx) != client_tx.end())
+        {
+            std::cout<<device_ip_address<<"DA"<<itr_client_tx->first<<"MS"<<itr_client_tx->second<<"RA";
+        }
+        else {
+        std::cout<<device_ip_address<<"DA"<<itr_client_tx->first<<"MS"<<itr_client_tx->second<<endl;
+        }
+    }   
+    }
+    else
+    {
+        std::cout<<device_ip_address<<"DA"<<destination_ip_address<<"MS"<<(uint8_t)(0)<<endl;
+    }
+
+    #elif ACTIVE_USER == DESTINATION_NODE
+    //Sedning rx rate from client and the calculated PING from client 
+    //['Destination node address','C','N',Client address,'M','R','Amount of messages received','P','I','Ping','R','A',........,'\n']
+    //Define the vector's of measurement
+    std::vector<uint8_t> clients;
+    std::vector<uint8_t> client_rx_m;
+    std::vector<uint32_t> client_PING_m;
+    //Push data back into vectors
+    for (auto& x: client_rx) 
+    {  
+      clients.push_back(x.first);
+      client_rx_m.push_back(x.second);
+    }  
+    for (auto& x: client_PING) 
+    {  
+      client_PING_m.push_back(x.second);
+    }  
+    //Sending the data now
+    unsigned char my_PING[4];
+    for (int i = 0; i<clients.size();++i)
+    {
+        if (i<clients.size()-1)
+        {
+            uint32_2Bytes(my_PING,client_PING_m.at(i));
+            std::cout<<device_ip_address<<"CN"<<clients.at(i)<<"MR"<<client_rx_m.at(i)<<"PI"<<my_PING[3]<<my_PING[2]<<my_PING[1]<<my_PING[0]<<"RA";
+        }
+        else {
+        uint32_2Bytes(my_PING,client_PING_m.at(i));
+        std::cout<<device_ip_address<<"CN"<<clients.at(i)<<"MR"<<client_rx_m.at(i)<<"PI"<<my_PING[3]<<my_PING[2]<<my_PING[1]<<my_PING[0]<<endl;
+        }
+    }
+//
+   #endif  
+
+
+
+    //Clear tx counter
+    tx_sent = 0;
+    //Set entrries in neighbour counter to 0
+    for (auto& x: tx_neighbour) 
+    {  
+    x.second = 0; 
+    }  
+    //Clear RX counter
+    m_rx_count = 0;
+    //Set RX entries to 0
+    for (auto& x: neighbour_rx) 
+    {  
+    x.second = 0; 
+    }  
+
+    #if ACTIVE_USER == CLIENT_NODE
+    //Clear the tx_client trackers
+    for (auto& x: client_tx) 
+    {  
+    x.second = 0; 
+    }  
+    #endif
+
+    #if ACTIVE_USER == DESTINATION_NODE
+    //Clear the rx_client trackers
+    for (auto& x: client_rx) 
+    {  
+    x.second = 0; 
+    }  
+    #endif
+
+
+}
+
+void Queue_Simulation_Timer_Expire()
+{
+    main_queue.call(Simulation_Timer_Expire);
+}
+
+
+void update_tx_neighbour(uint8_t add)
+{
+    //Find the key element
+    auto element=tx_neighbour.find(add);
+    if (element->first == add)
+    {
+        //It exhists so update the tx amount
+        element-> second++;
+    }
+    else {
+    //Does not exhist to insert it into the tracker
+        tx_neighbour.insert(std::make_pair(add, 1));
+    }
+
+}
+
+#if ACTIVE_USER == DESTINATION_NODE
+    void update_rx_client(uint8_t add)
+    {
+    //Find the key element
+    auto element=client_rx.find(add);
+    if (element->first == add)
+    {
+        //It exhists so update the tx amount
+        element-> second++;
+    }
+    else {
+    //Does not exhist to insert it into the tracker
+        client_rx.insert(std::make_pair(add, 1));
+    }
+    }
+
+    void update_PING_client(std::vector<uint8_t> packet)
+    {
+        //First obtain the current time 
+        uint32_t end_clock = (uint32_t) clock();
+        //Obtain the time the message was created 
+        uint32_t start_clock = (packet.at(MESSAGE_TIME_FOUR) << 24) | (packet.at(MESSAGE_TIME_THREE) << 16) | (packet.at(MESSAGE_TIME_TWO) << 8) | packet.at(MESSAGE_TIME_ONE);
+        //Obtain the PING
+        //std::cout<<"Start PING was "<< start_clock<< " end PING was "<< end_clock <<endl;
+        uint32_t ping = 10*(end_clock-start_clock); //Gives it in ms
+        //Update the map
+        //Find the key element
+        auto element=client_PING.find(packet.at(MESSAGE_PACKET_ORIGIN));
+        if (element->first == packet.at(MESSAGE_PACKET_ORIGIN))
+        {
+            //It exhists so update the tx amount
+            element-> second = (uint32_t) ((element-> second+ping)/2);
+        }
+        else {
+        //Does not exhist to insert it into the tracker
+            client_PING.insert(std::make_pair(packet.at(MESSAGE_PACKET_ORIGIN), ping));
+        } 
+    }
+#endif
+
+
+#if ACTIVE_USER == CLIENT_NODE
+    void update_tx_client(uint8_t add)
+    {
+    //Find the key element
+    auto element=client_tx.find(add);
+    if (element->first == add)
+    {
+        //It exhists so update the tx amount
+        element-> second++;
+    }
+    else {
+    //Does not exhist to insert it into the tracker
+        client_tx.insert(std::make_pair(add, 1));
+    }
+    }
+
+#endif
 
 #endif

@@ -288,6 +288,7 @@ void RoutingTable::Purge() {
             }
             else if (i->second.GetFlag () == VALID)
             {
+                //std::cout<<"Invalidating an entry "<<" ENTRY LIFE TIME WAS "<< i->second.GetLifeTime () <<" current clock is "<<clock()<<endl;
                 i->second.Invalidate (m_badLinkLifetime);
                 ++i;
             }

@@ -41,14 +41,36 @@ void message_queue_handler(void);
 #if ACTIVE_USER == DESTINATION_NODE
     uint8_t device_ip_address = 100;
     uint8_t destination_ip_address = 100;
+    uint8_t client_ip_address = 20;
+    //Define the client rx tracker
+    //Tracks the client rx rate
+    //KEY           VALUE
+    //client        throughput
+    std::map<uint8_t,uint8_t> client_rx;
+    //Define the client PING tracker
+    //Tracks the client PING
+    //KEY           VALUE
+    //client        PING
+    std::map<uint8_t,uint32_t> client_PING;
+
+    void update_rx_client(uint8_t add);
+    void update_PING_client(std::vector<uint8_t> packet);
+
 #elif ACTIVE_USER == ROUTING_NODE
     Random RNG = Random();
     uint8_t device_ip_address = 0;
     uint8_t destination_ip_address = 100;
+    uint8_t client_ip_address = 20;
 #elif ACTIVE_USER == CLIENT_NODE
     uint8_t device_ip_address = 20;
     uint8_t destination_ip_address = 100;
-
+    uint8_t client_ip_address = 20;
+    //Define the client tx tracker
+    //Tracks the client tx rate
+    //KEY           VALUE
+    //destination     throughput
+    std::map<uint8_t,uint8_t> client_tx;
+    void update_tx_client(uint8_t add);
 #endif
 
 //////////////////////////////////////////////////////////////////////////////
@@ -66,6 +88,44 @@ uint8_t m_neighbourCount; //how many tries to reach neighbour
 
 EventQueue main_queue(32 * EVENTS_EVENT_SIZE); //this will call an event in IRQ so the process can be handled safely.
 Thread main_thread; //Thread that handles the queue
+
+///////////////////////////////////////////////////////////////
+/////////////Tracking variables used for simulation /////////////
+
+uint16_t tx_sent; //amount of packets sent
+//Tracks to whom the messages where sent to
+//Tracks the packets to be sent over for retrying
+//KEY           VALUE
+//neighbour     tx_packet
+std::map<uint8_t, uint16_t> tx_neighbour; 
+
+//Function that maintains the tx_neighbour tracker
+void update_tx_neighbour(uint8_t add);
+
+uint16_t m_rx_count; //keeps track of messages received per epoch count
+//Tracks the packets to be sent over for retrying
+//KEY           VALUE
+//neighbour     rx_packet
+std::map<uint8_t,uint16_t> neighbour_rx;
+//Tracks the RSSI values of links
+//KEY           VALUE
+//neighbour     RSSI
+std::map<uint8_t,int16_t> neighbour_RSSI;
+//Tracks the SNR values of links
+//KEY           VALUE
+//neighbour     rx_packet
+std::map<uint8_t,uint8_t> neighbour_SNR;
+
+
+
+//Ticker used to initialize the capture functions
+Ticker Simulation_t;
+//Defines the functions to capture and send data per epoch
+void Simulation_Timer_Expire();
+void Queue_Simulation_Timer_Expire();
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 //////////MAIN FUNCTIONS//////////////////////////////////////////////////////
@@ -336,6 +396,80 @@ void Rx_interrupt() {
     rx_bit = 1;
     return;
 }
+
+
+/////////////////////////////////////////////////////////////////////
+/////////// UTILITY FUNCTIONS /////////////////////////////////////
+/////// USED FOR SERIAL PRINTING TO IMPROVE QUALITY ///////////////
+//////////////////////////////////////////////////////////////////
+
+//Converts them to bytes 
+void uint16_2uint8_t(uint8_t bytes_temp[2],uint16_t uint16_variable){
+    union {
+        uint16_t a;
+        uint8_t bytes[2];
+    } thing;
+    thing.a = uint16_variable;
+    memcpy(bytes_temp, thing.bytes, 2);
+}
+
+
+void int16_2uint8_t(uint8_t bytes_temp[2],int16_t int16_variable){
+    union {
+        int16_t a;
+        uint8_t bytes[2];
+    } thing;
+    thing.a = int16_variable;
+    memcpy(bytes_temp, thing.bytes, 2);
+}
+
+void uint32_2uint8_t(uint8_t bytes_temp[4],uint32_t uint32_t_variable){
+    union {
+        uint32_t a;
+        uint8_t bytes[4];
+    } thing;
+    thing.a = uint32_t_variable;
+    memcpy(bytes_temp, thing.bytes, 4);
+}
+
+void uint16_2Bytes(unsigned char bytes_temp[2],uint16_t uint16_variable){
+    union {
+        uint16_t a;
+        unsigned char bytes[2];
+    } thing;
+    thing.a = uint16_variable;
+    memcpy(bytes_temp, thing.bytes, 2);
+}
+
+
+void int16_2Bytes(unsigned char bytes_temp[2],int16_t int16_variable){
+    union {
+        int16_t a;
+        unsigned char bytes[2];
+    } thing;
+    thing.a = int16_variable;
+    memcpy(bytes_temp, thing.bytes, 2);
+}
+
+void uint8_2Byte(unsigned char bytes_temp[1],uint8_t uint8_variable){
+    union {
+        uint8_t a;
+        unsigned char bytes[1];
+    } thing;
+    thing.a = uint8_variable;
+    memcpy(bytes_temp, thing.bytes, 1);
+}
+
+void uint32_2Bytes(unsigned char bytes_temp[4],uint32_t uint32_t_variable){
+    union {
+        uint32_t a;
+        unsigned char bytes[4];
+    } thing;
+    thing.a = uint32_t_variable;
+    memcpy(bytes_temp, thing.bytes, 4);
+}
+
+
 #endif
 #endif
 

@@ -14,11 +14,15 @@ extern RequestQueue route_queue;
 extern RequestQueue message_request_queue;
 bool radio_is_busy;
 std::vector<uint8_t> radio_data;
-
 void add_rx_data_queue(LoRaMacEventInfo* data);
 
-/////Declare some external variables here
+void Update_neighbour_rx(uint8_t neigh_address,uint8_t Snr,int16_t Rssi);
 
+/////Declare some external variables here
+extern uint16_t m_rx_count; //keeps track of messages received per epoch count
+extern std::map<uint8_t,uint16_t> neighbour_rx;
+extern std::map<uint8_t,int16_t> neighbour_RSSI;
+extern std::map<uint8_t,uint8_t> neighbour_SNR;
 
 
 class RadioEvent : public mDotEvent
@@ -89,7 +93,7 @@ public:
                 //Print Contents
                 for (int i =0;i<info->RxBufferSize;i++)
                 {
-                    std::cout << "Data at index " << i <<" is "<< info->RxBuffer[i]<<std::endl;
+                    //std::cout << "Data at index " << i <<" is "<< info->RxBuffer[i]<<std::endl;
                     }
                 //This is where I can see what data is being received.
                     add_rx_data_queue(info);
@@ -115,6 +119,23 @@ void add_rx_data_queue(LoRaMacEventInfo* data){
     //QueueEntry (std::vector<uint8_t> packet, clock_t exp)
     //Adds a new entry to the overall queue handler
     QueueEntry newEntry (radio_data,QUEUE_TIMEOUT*CLOCKS_PER_SEC/1000);
+    #if ACTIVE_USER == DESTINATION_NODE
+    if ((radio_data.at(2) != 20) && (radio_data.at(2) != 0))
+    {
+        Update_neighbour_rx(radio_data.at(2),data->RxSnr,data->RxRssi);//Updating receiving from neighbour
+        }
+    #elif ACTIVE_USER == CLIENT_NODE
+    if ((radio_data.at(2) != 100) && (radio_data.at(2) != 0) )
+    {
+        Update_neighbour_rx(radio_data.at(2),data->RxSnr,data->RxRssi);//Updating receiving from neighbour
+        }
+    #else
+    if (radio_data.at(2) != 0)
+    {
+    Update_neighbour_rx(radio_data.at(2),data->RxSnr,data->RxRssi);//Updating receiving from neighbour
+    }
+    #endif
+    
     if (radio_data.at(0)<6)
     {
         //Enter this into the message queue
@@ -137,14 +158,87 @@ void add_rx_data_queue(LoRaMacEventInfo* data){
         {
             //This means was not successful for some reason
             //TODO find out what to do
-            logInfo("ERROR did not enqueue");
+            #if ACTIVE_USER == DESTINATION_NODE
+//            std::cout<<"ERROR did not enqueue"<<endl;
+            #endif
             }
             else
             {
-                logInfo("Entered the data line 144");
+            #if ACTIVE_USER == DESTINATION_NODE
+//            std::cout<<"Proper Enqueue"<<endl;
+            #endif
                 }
         }
     
+}
+
+void Update_neighbour_rx(uint8_t neigh_address,uint8_t Snr,int16_t Rssi)
+{
+//Can at the same time increase tx amount since the same
+    m_rx_count++;
+    //Updating neighbour rx
+    if (neighbour_rx.empty())
+    {
+        //empty add a new entry
+        neighbour_rx.insert(std::make_pair(neigh_address, 1));
+    }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_rx.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second++;
+        }
+        else {
+        //insert a new element
+        neighbour_rx.insert(std::make_pair(neigh_address, 1));
+        }
+
+    }
+    //Updating neighbour RSSI
+        if (neighbour_RSSI.empty())
+    {
+        //empty add a new entry
+        neighbour_RSSI.insert(std::make_pair(neigh_address, RSSI));
+    }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_RSSI.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second =  (int16_t)((RSSI+ entry->second)/2);
+        }
+        else {
+        //insert a new element
+        neighbour_RSSI.insert(std::make_pair(neigh_address, RSSI));
+        }
+
+    }
+    //Updating neighbour SNR
+            if (neighbour_SNR.empty())
+    {
+        //empty add a new entry
+        neighbour_SNR.insert(std::make_pair(neigh_address, Snr));
+    }
+    else 
+    {
+        //Find if it is in the list
+        auto entry = neighbour_SNR.find(neigh_address);
+        if (entry->first == neigh_address)
+        {
+            //entry found now update count
+            entry->second =  (uint8_t)((Snr+ entry->second)/2);
+        }
+        else {
+        //insert a new element
+        neighbour_SNR.insert(std::make_pair(neigh_address, Snr));
+        }
+
+    }
 }
 
 #endif
