@@ -6,26 +6,30 @@ import seaborn as sns
 from IPython.display import clear_output
 import bitstring
 import networkx as nx
-
+from timeit import default_timer as timer
 
 #Setting Print Options For The Terminal
 np.set_printoptions(precision=4, linewidth=170, edgeitems=10, floatmode='fixed', sign=' ')
 plt.rcParams["font.family"] = "Times New Roman"
 plt.rcParams.update({'font.size': 13})
 live = False
+rrer_testing = False
 show_network_graph = False
 
 #Setting COM options
 #General COM parameters
 BYTE_ORDER = 'big'  # or 'big'
-SAMPLING_FREQ = 1  # Hz (every 1 sec)
-SAMPLING_TIME = 10 # Time to sample in seconds
+SAMPLING_FREQ = 0.9  # Hz (every 1 sec)
+SAMPLING_TIME = 5 # Time to sample in seconds
 NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
+REPITITIONS = 1
 BAUD_RATE = 115200
 
 #PORTS for specific devices
 COM_PORT_TEST = 'COM19'
-COM_PORT_NODE_CLIENT = 'COM12'
+# COM_PORT_NODE_CLIENT = 'COM12'
+
+COM_PORT_NODE_CLIENT = 'COM19'
 COM_PORT_NODE_1 = 'COM34'
 COM_PORT_NODE_2 = 'COM35'
 COM_PORT_NODE_3 = 'COM30'
@@ -35,9 +39,9 @@ COM_PORT_NODE_DESTINATION = 'COM33'
 
 #TEST PARAMETERS
 # What test are we doing????
-current_test = 0
+current_test = 1
 # Define the test strings
-test_array = ["Defining"]
+test_array = ["RRER_TEST_TWO","BASIC_MESSAGE_FINAL","RRER_TEST_THREE","RREQ_TESTING","OFFICIAL_RRER_TESTING","OFFICIAL_HELLO_TESTING"]
 #Measurements taken
 measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node",
                      "_throughput_per_dest","_ping_per_dest","_mdr_per_dest","_dest_route_visual","_origin_route_visual"]
@@ -70,14 +74,24 @@ NODE_TO_CLIENT_add = []
 #Data to be stored defined here
 #Store the loads here
 LOAD_array = []
+#Stores the average array for the node
+LOAD_average = []
 #Store amount of packets sent here
 PACKETS_sent = []
+#Store amount of packets sent average
+PACKETS_sent_average = []
 #Store amount of packets received here
 PACKETS_received = []
+#Store amount of packets average here
+PACKETS_received_average = []
 #Store the average RSSI of received link rememeber it is signed
 RSSI_value = []
+#Store the average RSSI of received link rememeber it is signed average for tests
+RSSI_value_average = []
 #Store the average SNR of received link rememeber this is again unsigned???? makes sure
 SNR_value = []
+#Store the average SNR of received link rememeber this is again unsigned???? makes sure average
+SNR_value_average = []
 #Stores the routing table next hop entries for each node for a given destination
 DESTINATION_ROUTING_table_next = []
 #STores the next hop for the chosen path
@@ -88,10 +102,16 @@ ORIGIN_ROUTING_table_next = []
 ORIGIN_ROUTING_table_path = []
 #Stores the amount of messages packets received per epoch
 Dest_RX_Amount = []
+#Stores the amount of messages packets received per epoch average
+Dest_RX_Amount_average = []
 #Stores the average PING for received messages
 Dest_PING_Amount = []
+#Stores the average PING for received messages averaged
+Dest_PING_Amount_average = []
 #Stores the amount of messages sent by client to destination per epoch
 Client_TX_Amount = []
+#Stores the amount of messages sent by client to destination per epoch _average
+Client_TX_Amount_average = []
 #STores the PDR for each link between node x and neighbour y
 NODE_PDR_value = []
 #Stores the ETX for each link between node x and neighbour y
@@ -114,8 +134,8 @@ current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
 #Libraries for graphing
-DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ration','ETX value for link',
-                 'RSSI for link (dB)','SNR for link (dB)','Throughput (packets/s)','Packet Delay (ms)',
+DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ratio','ETX value for link',
+                 'RSSI for link (dBm)','SNR for link (dBm)','Throughput (packets/s)','Packet Delay (ms)',
                  'Message Delivery Ratio','Destination Route Visualize','Origin Route Visualize']
 LINE_COLORS = ['b','g','r','c','m','y','k','w']
 #Defining clock per second for microcontroller
@@ -2467,32 +2487,32 @@ def rx_Read_TESTING(ser,loops):
     print(DESTINATION_ROUTING_table_next)
     print("-------------------------------------")
     print("###########################################################")
-    # Read the routing table entries
-    if (read_in_ORIGIN_ROUTING_TABLE(ser)):
-        # This means error occured so decrease i and revert variables. Lastly exit this function
-        revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
-                         BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
-                         , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
-                         BACKUP_PACKETS_received, BACKUP_RSSI_value \
-                         , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
-                         BACKUP_DESTINATION_ROUTING_table_path, \
-                         BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
-                         BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
-        return True
-    print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
-    print("-----Current list of known nodes-----------")
-    print(NODE_index)
-    print("-------------------------------------")
-    print("-----Current List known origin for known nodes-----------")
-    print(NODE_TO_CLIENT_add)
-    print("-------------------------------------")
-    print("-----Chosen next hop path for each node to origin-----------")
-    print(ORIGIN_ROUTING_table_path)
-    print("-------------------------------------")
-    print("-----All known next hop path for each node to origin-----------")
-    print(ORIGIN_ROUTING_table_next)
-    print("-------------------------------------")
-    print("###########################################################")
+    # # Read the routing table entries
+    # if (read_in_ORIGIN_ROUTING_TABLE(ser)):
+    #     # This means error occured so decrease i and revert variables. Lastly exit this function
+    #     revert_to_backup(BACKUP_NODE_index, BACKUP_NEIGH_add, BACKUP_DEST_add, BACKUP_CLIENT_add,
+    #                      BACKUP_DEST_TO_CLIENT_add, BACKUP_CLIENT_TO_DEST_add \
+    #                      , BACKUP_NODE_TO_DEST_add, BACKUP_NODE_TO_CLIENT_add, BACKUP_LOAD_array, BACKUP_PACKETS_sent,
+    #                      BACKUP_PACKETS_received, BACKUP_RSSI_value \
+    #                      , BACKUP_SNR_value, BACKUP_DESTINATION_ROUTING_table_next,
+    #                      BACKUP_DESTINATION_ROUTING_table_path, \
+    #                      BACKUP_ORIGIN_ROUTING_table_next, BACKUP_ORIGIN_ROUTING_table_path, BACKUP_Dest_RX_Amount, \
+    #                      BACKUP_Dest_PING_Amount, BACKUP_Client_TX_Amount, BACKUP_NODE_PDR_value, BACKUP_NODE_ETX_value)
+    #     return True
+    # print("######## PRINTING ORIGIN ROUTING TABLE MEASUREMENTS #############")
+    # print("-----Current list of known nodes-----------")
+    # print(NODE_index)
+    # print("-------------------------------------")
+    # print("-----Current List known origin for known nodes-----------")
+    # print(NODE_TO_CLIENT_add)
+    # print("-------------------------------------")
+    # print("-----Chosen next hop path for each node to origin-----------")
+    # print(ORIGIN_ROUTING_table_path)
+    # print("-------------------------------------")
+    # print("-----All known next hop path for each node to origin-----------")
+    # print(ORIGIN_ROUTING_table_next)
+    # print("-------------------------------------")
+    # print("###########################################################")
 
     # Read in the message sdent data
     if(read_in_AMOUNT_SENT_CLIENT(ser)):
@@ -2711,51 +2731,324 @@ if __name__ == "__main__":
             # plt.pause(0.33)
     elif not live:
         header = 0
-        #Merely samples the serial at these intervals
+        for c in range(0,REPITITIONS):
+            #Merely samples the serial at these intervals
+            # try:
+            #     # Setup the serial
+            #     ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+            #                            bytesize=serial.EIGHTBITS)
+            #     print("Connected to " + COM_PORT_NODE_1 + ".")
+            # except:
+            #     print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
+            #     exit()
+            # try:
+            #     # Setup the serial
+            #     ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+            #                                bytesize=serial.EIGHTBITS)
+            #     print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+            # except:
+            #     print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
+            #     exit()
+            # try:
+            #     # Setup the serial
+            #     ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+            #                             bytesize=serial.EIGHTBITS)
+            #     print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+            # except:
+            #     print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
+            #     exit()
+            # try:
+            #     # Setup the serial
+            #     ser_R2 = serial.Serial(COM_PORT_NODE_2, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+            #                             bytesize=serial.EIGHTBITS)
+            #     print("Connected to " + COM_PORT_NODE_2 + ".")
+            # except:
+            #     print("Could not connect to the device " + COM_PORT_NODE_2 + ".")
+            #     exit()
+            # try:
+            #     # Setup the serial
+            #     ser_R4 = serial.Serial(COM_PORT_NODE_4, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+            #                             bytesize=serial.EIGHTBITS)
+            #     print("Connected to " + COM_PORT_NODE_4 + ".")
+            # except:
+            #     print("Could not connect to the device " + COM_PORT_NODE_4 + ".")
+            #     exit()
+
+            ######################################################
+            ## VALIDATION TESTING IS DEFINED HERE
+            #################################################
+            try:
+                # Setup the serial
+                ser_Test = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                        bytesize=serial.EIGHTBITS)
+                print("Connected to " + COM_PORT_TEST + ".")
+            except:
+                print("Could not connect to the device " + COM_PORT_TEST + ".")
+                exit()
+            #############################################################
+            ###VALIDATION CODE SETUP ENDS ##############################
+            ############################################################
+
+
+            start = timer()
+            timer_flag = True
+            for i in range(NUM_SAMPLES):
+
+                flag_got = False #Says if got error
+                #Every time the serial need to be opened then closed again
+                # Now obtain the data
+                # if (rx_Read_Client(ser_Client, i) and (not flag_got)):
+                #     flag_got = True
+
+                ######################################################
+                ## VALIDATION TESTING IS DEFINED HERE
+                #################################################
+                if (rx_Read_TESTING(ser_Test, i) and (not flag_got)):
+                    flag_got = True
+                #############################################################
+                ###VALIDATION CODE SETUP ENDS ##############################
+                ############################################################
+
+                # if (rx_Read_Client(ser_Client, i) and (not flag_got)):
+                #     flag_got = True
+                # Now obtain the data
+                # if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
+                #     flag_got = True
+                # if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
+                #     flag_got = True
+                # #Now obtain the data
+                # if (rrer_testing):
+                #     if (timer()-start>10) and (timer_flag):
+                #         timer_flag = False
+                # else:
+                #     if (timer()-start>10000) and (timer_flag):
+                #         timer_flag = False
+                #
+                # if (timer_flag):
+                #     if (rx_Read_Node(ser_R1,i) and (not flag_got)):
+                #         flag_got = True
+                # else:
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     print("###### SWITCH OFFF #############")
+                #     ser_R1.close()
+                #Now obtain the data
+                # if (rx_Read_Node(ser_R2,i) and (not flag_got)):
+                #     flag_got = True
+                # # #Now obtain the data
+                # # if (rx_Read_Node(ser_R4,i) and (not flag_got)):
+                # #     flag_got = True
+                #
+                # if(flag_got):
+                #     print("Increase NUM_SAMPLES")
+                #     NUM_SAMPLES+=1
+
+                plt.pause(1/SAMPLING_FREQ)
+            #After we get the samples we close every serial to reset the tests
+            # if (timer_flag):
+            #     ser_R1.close()
+            # # ser_R4.close()
+            # ser_R2.close()
+            # ser_Dst.close()
+            # ser_Client.close()
+            ######################################################
+            ## VALIDATION TESTING IS DEFINED HERE
+            #################################################
+            ser_Test.close()
+            #############################################################
+            ###VALIDATION CODE SETUP ENDS ##############################
+            ############################################################
+
+            if (c==0):
+                #This was the first sample so we have a rough idea of how the data will look. Construct the average arrays
+                # Stores the ETX for each link between node x and neighbour y_average
+
+                for z in range(0,len(PACKETS_sent)):
+                    holder_one = []
+                    for l in range(0,len(PACKETS_sent[z])):
+                        holder_two = []
+                        for t in range(0,len(PACKETS_sent[z][l])):
+                            holder_two.append(PACKETS_sent[z][l][t])
+                        holder_one.append(holder_two)
+                    PACKETS_sent_average.append(holder_one)
+                # STores the PDR for each link between node x and neighbour y_average
+                for z in range(0,len(PACKETS_received)):
+                    holder_one = []
+                    for l in range(0,len(PACKETS_received[z])):
+                        holder_two = []
+                        for t in range(0,len(PACKETS_received[z][l])):
+                            holder_two.append(PACKETS_received[z][l][t])
+                        holder_one.append(holder_two)
+                    PACKETS_received_average.append(holder_one)
+
+                for z in range(0,len(RSSI_value)):
+                    holder_one = []
+                    for l in range(0,len(RSSI_value[z])):
+                        holder_two = []
+                        for t in range(0,len(RSSI_value[z][l])):
+                            holder_two.append(RSSI_value[z][l][t])
+                        holder_one.append(holder_two)
+                    RSSI_value_average.append(holder_one)
+                # STores the PDR for each link between node x and neighbour y_average
+                for z in range(0,len(SNR_value)):
+                    holder_one = []
+                    for l in range(0,len(SNR_value[z])):
+                        holder_two = []
+                        for t in range(0,len(SNR_value[z][l])):
+                            holder_two.append(SNR_value[z][l][t])
+                        holder_one.append(holder_two)
+                    SNR_value_average.append(holder_one)
+
+                # Stores the amount of messages sent by client to destination per epoch _average
+                for z in range(0,len(Client_TX_Amount)):
+                    holder_one = []
+                    for l in range(0,len(Client_TX_Amount[z])):
+                        holder_two = []
+                        for t in range(0,len(Client_TX_Amount[z][l])):
+                            holder_two.append(Client_TX_Amount[z][l][t])
+                        holder_one.append(holder_two)
+                    Client_TX_Amount_average.append(holder_one)
+                # Stores the average PING for received messages averaged
+                for z in range(0,len(Dest_PING_Amount)):
+                    holder_one = []
+                    for l in range(0,len(Dest_PING_Amount[z])):
+                        holder_two = []
+                        for t in range(0,len(Dest_PING_Amount[z][l])):
+                            holder_two.append(Dest_PING_Amount[z][l][t])
+                        holder_one.append(holder_two)
+                    Dest_PING_Amount_average.append(holder_one)
+                # Stores the amount of messages packets received per epoch average
+                for z in range(0,len(Dest_RX_Amount)):
+                    holder_one = []
+                    for l in range(0,len(Dest_RX_Amount[z])):
+                        holder_two = []
+                        for t in range(0,len(Dest_RX_Amount[z][l])):
+                            holder_two.append(Dest_RX_Amount[z][l][t])
+                        holder_one.append(holder_two)
+                    Dest_RX_Amount_average.append(holder_one)
+                for z in range(0,len(LOAD_array)):
+                    holder_one = []
+                    for l in range(0,len(LOAD_array[z])):
+                        holder_one.append(LOAD_array[z][l])
+                    LOAD_average.append(holder_one)
+            else:
+                #We have the sizes so now we add each new amount
+                # This was the first sample so we have a rough idea of how the data will look. Construct the average arrays
+                # Stores the ETX for each link between node x and neighbour y_average
+
+                for z in range(0, len(PACKETS_sent_average)):
+                    for l in range(0, len(PACKETS_sent_average[z])):
+                        for t in range(0, len(PACKETS_sent_average[z][l])):
+                            PACKETS_sent_average[z][l][t] += PACKETS_sent[z][l][t]
+                # STores the PDR for each link between node x and neighbour y_average
+                for z in range(0, len(PACKETS_received_average)):
+                    for l in range(0, len(PACKETS_received_average[z])):
+                        for t in range(0, len(PACKETS_received_average[z][l])):
+                            PACKETS_received_average[z][l][t] += PACKETS_received[z][l][t]
+
+                for z in range(0, len(RSSI_value_average)):
+                    for l in range(0, len(RSSI_value_average[z])):
+                        for t in range(0, len(RSSI_value_average[z][l])):
+                            RSSI_value_average[z][l][t] += RSSI_value[z][l][t]
+                # STores the PDR for each link between node x and neighbour y_average
+                for z in range(0, len(SNR_value_average)):
+                    for l in range(0, len(SNR_value_average[z])):
+                        for t in range(0, len(SNR_value_average[z][l])):
+                            SNR_value_average[z][l][t] +=SNR_value[z][l][t]
+
+                # Stores the amount of messages sent by client to destination per epoch _average
+                for z in range(0, len(Client_TX_Amount_average)):
+                    for l in range(0, len(Client_TX_Amount_average[z])):
+                        for t in range(0,len(Client_TX_Amount_average[z][l])):
+                            Client_TX_Amount_average[z][l][t] +=Client_TX_Amount[z][l][t]
+                # Stores the average PING for received messages averaged
+                for z in range(0, len(Dest_PING_Amount_average)):
+                    for l in range(0, len(Dest_PING_Amount_average[z])):
+                        for t in range(0,len(Dest_PING_Amount_average[z][l])):
+                            Dest_PING_Amount_average[z][l][t] +=Dest_PING_Amount[z][l][t]
+                # Stores the amount of messages packets received per epoch average
+                for z in range(0, len(Dest_RX_Amount_average)):
+                    for l in range(0, len(Dest_RX_Amount_average[z])):
+                        for t in range(0,len(Dest_PING_Amount_average[z][l])):
+                            Dest_RX_Amount_average[z][l][t] +=Dest_RX_Amount[z][l][t]
+                for z in range(0,len(LOAD_average)):
+                    for l in range(0,len(LOAD_average[z])):
+                        LOAD_average[z][l] += LOAD_array[z][l]
+
+            #We now reset all of the main variables to restart the sampling process
+            Client_TX_Amount = []
+            Dest_PING_Amount = []
+            Dest_RX_Amount = []
+            SNR_value = []
+            RSSI_value = []
+            PACKETS_received = []
+            PACKETS_sent = []
+            LOAD_array = []
+
+
+
+        #After everything we can finally summarize the data
+        for z in range(0, len(PACKETS_sent_average)):
+            for l in range(0, len(PACKETS_sent_average[z])):
+                for t in range(0, len(PACKETS_sent_average[z][l])):
+                    PACKETS_sent_average[z][l][t] *= 1/REPITITIONS
+        # STores the PDR for each link between node x and neighbour y_average
+        for z in range(0, len(PACKETS_received_average)):
+            for l in range(0, len(PACKETS_received_average[z])):
+                for t in range(0, len(PACKETS_received_average[z][l])):
+                    PACKETS_received_average[z][l][t] *= 1/REPITITIONS
+
+        for z in range(0, len(RSSI_value_average)):
+            for l in range(0, len(RSSI_value_average[z])):
+                for t in range(0, len(RSSI_value_average[z][l])):
+                    RSSI_value_average[z][l][t] *= 1/REPITITIONS
+        # STores the PDR for each link between node x and neighbour y_average
+        for z in range(0, len(SNR_value_average)):
+            for l in range(0, len(SNR_value_average[z])):
+                for t in range(0, len(SNR_value_average[z][l])):
+                    SNR_value_average[z][l][t] *= 1/REPITITIONS
+
+        # Stores the amount of messages sent by client to destination per epoch _average
         try:
-            # Setup the serial
-            ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-                                   bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_1 + ".")
+            for z in range(0, len(Client_TX_Amount_average)):
+                for l in range(0, len(Client_TX_Amount_average[z])):
+                    for t in range(0,len(Client_TX_Amount_average[z][l] )):
+                        Client_TX_Amount_average[z][l][t] *= 1/REPITITIONS
         except:
-            print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
-            exit()
+            print(" CLIENT TX PROBLEM ")
+        # Stores the average PING for received messages averaged
         try:
-            # Setup the serial
-            ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-                                       bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+            for z in range(0, len(Dest_PING_Amount_average)):
+                for l in range(0, len(Dest_PING_Amount_average[z])):
+                    for t in range(0,len(Dest_PING_Amount_average[z][l])):
+                        Dest_PING_Amount_average[z][l][t] *= 1/REPITITIONS
         except:
-            print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
-            exit()
-        try:
-            # Setup the serial
-            ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-                                    bytesize=serial.EIGHTBITS)
-            print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
-        except:
-            print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
-            exit()
+            print("PING DATA FAILURE")
+        # Stores the amount of messages packets received per epoch average
+        for z in range(0, len(Dest_RX_Amount_average)):
+            for l in range(0, len(Dest_RX_Amount_average[z])):
+                for t in range(0,len(Dest_RX_Amount_average[z][l])):
+                    Dest_RX_Amount_average[z][l][t] *= 1/REPITITIONS
 
-        for i in range(NUM_SAMPLES):
-            flag_got = False #Says if got error
-            #Every time the serial need to be opened then closed again
-            # Now obtain the data
-            if (rx_Read_Client(ser_Client, i) and (not flag_got)):
-                flag_got = True
-            # Now obtain the data
-            if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
-                flag_got = True
-            #Now obtain the data
-            if (rx_Read_Node(ser_R1,i) and (not flag_got)):
-                flag_got = True
-
-            if(flag_got):
-                print("Increase NUM_SAMPLES")
-                NUM_SAMPLES+=1
-
-            plt.pause(1/SAMPLING_FREQ)
-
+        for z in range(0, len(LOAD_average)):
+            holder_one = []
+            for l in range(0, len(LOAD_average[z])):
+                LOAD_average[z][l] *= 1/REPITITIONS
 
         print("########### Starting Plotting Data ###########")
 
@@ -2770,10 +3063,10 @@ if __name__ == "__main__":
         legend = []
         for i in range (0,len(NODE_index)):
             legend.append("Node "+str(NODE_index[i]))
-        for i in range(0,len(LOAD_array)):
-            while (len(LOAD_array[i])<len(X_axis)):
-                LOAD_array[i].append(0)
-            plt.plot(X_axis,LOAD_array[i],LINE_COLORS[i])
+        for i in range(0,len(LOAD_average)):
+            while (len(LOAD_average[i])<len(X_axis)):
+                LOAD_average[i].append(0)
+            plt.plot(X_axis,LOAD_average[i],LINE_COLORS[i])
         plt.legend(legend)
         plt.savefig(test_array[current_test]+measurement_array[0]+".pdf")
         plt.show()
@@ -2781,7 +3074,7 @@ if __name__ == "__main__":
         #Print the load data
         print("########### Plotting " + DATATYPE_LIST[1] + " ###########")
         #Now plotting the PDR data
-        for i in range(0,len(PACKETS_received)):
+        for i in range(0,len(PACKETS_received_average)):
             plt.ylabel(DATATYPE_LIST[1])
             plt.xlabel("Time (s)")
             # fig.tight_layout()
@@ -2790,14 +3083,14 @@ if __name__ == "__main__":
             # Construct legend for this node's data
             legend = []
             holder = []
-            for j in range(0,len(PACKETS_received[i])):
+            for j in range(0,len(PACKETS_received_average[i])):
                 # Define the array
                 PDR_data = []
                 # define the cetx array too
                 CETX_data = []
                 neigh_add = NEIGH_add[i][j]
                 legend.append("Neighbour " + str(neigh_add))
-                for k in range(0,len(PACKETS_received[i][j])):
+                for k in range(0,len(PACKETS_received_average[i][j])):
                     #Obtain index of the current neighbour the measurements were received from
                     if (neigh_add in NODE_index):
                         node_index = NODE_index.index(neigh_add)
@@ -2806,8 +3099,8 @@ if __name__ == "__main__":
                         my_index = NEIGH_add[node_index].index(NODE_index[i])
                         #As such the corresponding data received was sent by node_index to my_index
                         try:
-                            if (PACKETS_sent[node_index][my_index][k]!=0):
-                                PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
+                            if (PACKETS_sent_average[node_index][my_index][k]!=0):
+                                PDR_data.append(PACKETS_received_average[i][j][k]/PACKETS_sent_average[node_index][my_index][k])
                             else:
                                 PDR_data.append(0)
                         except:
@@ -2826,7 +3119,7 @@ if __name__ == "__main__":
             plt.close()
         print("########### Plotting " + DATATYPE_LIST[2] + " ###########")
         #Now plotting the ETX data
-        for i in range(0,len(PACKETS_received)):
+        for i in range(0,len(NODE_PDR_value)):
             plt.ylabel(DATATYPE_LIST[2])
             plt.xlabel("Time (s)")
             # fig.tight_layout()
@@ -2835,14 +3128,14 @@ if __name__ == "__main__":
             # Construct legend for this node's data
             legend = []
             holder = []
-            for j in range(0,len(PACKETS_received[i])):
+            for j in range(0,len(NODE_PDR_value[i])):
                 # Define the array
                 PDR_data = []
                 # define the cetx array too
                 CETX_data = []
                 neigh_add = NEIGH_add[i][j]
                 legend.append("Neighbour " + str(neigh_add))
-                for k in range(0,len(PACKETS_received[i][j])):
+                for k in range(0,len(NODE_PDR_value[i][j])):
                     #Obtain index of the current neighbour the measurements were received from
                     try:
                         node_index = NODE_index.index(neigh_add)
@@ -2850,8 +3143,8 @@ if __name__ == "__main__":
                         my_index = NEIGH_add[node_index].index(NODE_index[i])
                         #As such the corresponding data received was sent by node_index to my_index
                         #PDR_data.append(PACKETS_received[i][j][k]/PACKETS_sent[node_index][my_index][k])
-                        if (PACKETS_sent[node_index][my_index][k] and PACKETS_received[i][j][k]):
-                            CETX_data.append(1/(PACKETS_received[i][j][k]*PACKETS_sent[node_index][my_index][k]))
+                        if (NODE_PDR_value[node_index][my_index][k] and NODE_PDR_value[i][j][k]):
+                            CETX_data.append(1/(NODE_PDR_value[i][j][k]*NODE_PDR_value[node_index][my_index][k]))
                         else:
                             CETX_data.append(0)
                     except:
@@ -2868,7 +3161,7 @@ if __name__ == "__main__":
 
         print("########### Plotting " + DATATYPE_LIST[3] + " ###########")
         #Now plotting the RSSI data
-        for i in range(0,len(RSSI_value)):
+        for i in range(0,len(RSSI_value_average)):
             plt.ylabel(DATATYPE_LIST[3])
             plt.xlabel("Time (s)")
             # fig.tight_layout()
@@ -2876,14 +3169,14 @@ if __name__ == "__main__":
             plt.grid(True)
             # Construct legend for this node's data
             legend = []
-            for j in range(0,len(RSSI_value[i])):
+            for j in range(0,len(RSSI_value_average[i])):
                 try:
                     neigh_add = NEIGH_add[i][j]
                     #Define the RSSI holder
                     RSSI_holder = []
                     legend.append("Neighbour " + str(neigh_add))
-                    for k in range(0,len(RSSI_value[i][j])):
-                        RSSI_holder.append(RSSI_value[i][j][k])
+                    for k in range(0,len(RSSI_value_average[i][j])):
+                        RSSI_holder.append(RSSI_value_average[i][j][k])
                     while(len(RSSI_holder)>len(X_axis)):
                         RSSI_holder.pop(-1)
                     plt.plot(X_axis, RSSI_holder, LINE_COLORS[j])
@@ -2896,7 +3189,7 @@ if __name__ == "__main__":
 
         print("########### Plotting " + DATATYPE_LIST[4] + " ###########")
         #Now plotting the SNR data
-        for i in range(0,len(SNR_value)):
+        for i in range(0,len(SNR_value_average)):
             plt.ylabel(DATATYPE_LIST[4])
             plt.xlabel("Time (s)")
             # fig.tight_layout()
@@ -2904,14 +3197,14 @@ if __name__ == "__main__":
             plt.grid(True)
             # Construct legend for this node's data
             legend = []
-            for j in range(0,len(SNR_value[i])):
+            for j in range(0,len(SNR_value_average[i])):
                 try:
                     neigh_add = NEIGH_add[i][j]
                     #Define the RSSI holder
                     SNR_holder = []
                     legend.append("Neighbour " + str(neigh_add))
-                    for k in range(0,len(SNR_value[i][j])):
-                        SNR_holder.append(SNR_value[i][j][k])
+                    for k in range(0,len(SNR_value_average[i][j])):
+                        SNR_holder.append(SNR_value_average[i][j][k])
                     while(len(SNR_holder)>len(X_axis)):
                         SNR_holder.pop(-1)
                     plt.plot(X_axis, SNR_holder, LINE_COLORS[j])
@@ -2924,7 +3217,7 @@ if __name__ == "__main__":
 
         print("########### Plotting " + DATATYPE_LIST[5] + " ###########")
         #Now plotting the Throughput data
-        for i in range(0,len(Dest_RX_Amount)):
+        for i in range(0,len(Dest_RX_Amount_average)):
             plt.ylabel(DATATYPE_LIST[5])
             plt.xlabel("Time (s)")
             # fig.tight_layout()
@@ -2932,13 +3225,13 @@ if __name__ == "__main__":
             plt.grid(True)
             # Construct legend for this node's data
             legend = []
-            for j in range(0,len(Dest_RX_Amount[i])):
+            for j in range(0,len(Dest_RX_Amount_average[i])):
                 client_add = DEST_TO_CLIENT_add[i][j]
                 #Define the RX holder
                 RX_holder = []
                 legend.append("Client " + str(client_add))
-                for k in range(0,len(Dest_RX_Amount[i][j])):
-                    RX_holder.append(Dest_RX_Amount[i][j][k])
+                for k in range(0,len(Dest_RX_Amount_average[i][j])):
+                    RX_holder.append(Dest_RX_Amount_average[i][j][k])
                 while(len(RX_holder)<len(X_axis)):
                     RX_holder.append(0)
                 plt.plot(X_axis, RX_holder, LINE_COLORS[j])
@@ -2948,59 +3241,65 @@ if __name__ == "__main__":
             plt.show()
             plt.close()
 
-        print("########### Plotting " + DATATYPE_LIST[6] + " ###########")
-        #Now plotting the PING data
-        for i in range(0,len(Dest_PING_Amount)):
-            plt.ylabel(DATATYPE_LIST[6])
-            plt.xlabel("Time (s)")
-            # fig.tight_layout()
-            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
-            plt.grid(True)
-            # Construct legend for this node's data
-            legend = []
-            for j in range(0,len(Dest_PING_Amount[i])):
-                client_add = DEST_TO_CLIENT_add[i][j]
-                #Define the ping holder
-                PING_holder = []
-                legend.append("Client " + str(client_add))
-                for k in range(0,len(Dest_PING_Amount[i][j])):
-                    PING_holder.append(Dest_PING_Amount[i][j][k])
-                plt.plot(X_axis, PING_holder, LINE_COLORS[j])
-            plt.legend(legend)
-            plt.savefig(test_array[current_test] + measurement_array[6] + "_for_destination_"+str(DEST_add[i])+".pdf")
-            plt.show()
-            plt.close()
+        try:
+            print("########### Plotting " + DATATYPE_LIST[6] + " ###########")
+            #Now plotting the PING data
+            for i in range(0,len(Dest_PING_Amount_average)):
+                plt.ylabel(DATATYPE_LIST[6])
+                plt.xlabel("Time (s)")
+                # fig.tight_layout()
+                plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+                plt.grid(True)
+                # Construct legend for this node's data
+                legend = []
+                for j in range(0,len(Dest_PING_Amount_average[i])):
+                    client_add = DEST_TO_CLIENT_add[i][j]
+                    #Define the ping holder
+                    PING_holder = []
+                    legend.append("Client " + str(client_add))
+                    for k in range(0,len(Dest_PING_Amount_average[i][j])):
+                        PING_holder.append(Dest_PING_Amount_average[i][j][k])
+                    plt.plot(X_axis, PING_holder, LINE_COLORS[j])
+                plt.legend(legend)
+                plt.savefig(test_array[current_test] + measurement_array[6] + "_for_destination_"+str(DEST_add[i])+".pdf")
+                plt.show()
+                plt.close()
+        except:
+            print("PING PROBLEM")
 
-        print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
-        #Now plotting the MDR data
-        for i in range(0,len(Client_TX_Amount)):
-            plt.ylabel(DATATYPE_LIST[7])
-            plt.xlabel("Time (s)")
-            # fig.tight_layout()
-            plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
-            plt.grid(True)
-            # Construct legend for this node's data
-            legend = []
-            for j in range(0,len(Client_TX_Amount[i])):
-                dest_add = CLIENT_TO_DEST_add[i][j]
-                #Define the mdr holder
-                MDR_holder = []
-                legend.append("Client " + str(client_add))
-                for k in range(0,len(Client_TX_Amount[i][j])):
-                    #Obtain index of the current client the measurements were received from
-                    dest_index = DEST_add.index(dest_add)
-                    # Obtain index of the current destination in the client's destination index
-                    my_index = DEST_TO_CLIENT_add[dest_index].index(CLIENT_add[i])
-                    #As such the corresponding data received was received by dest_index from my_index
-                    if (Client_TX_Amount[i][j][k]!=0):
-                        MDR_holder.append(Dest_RX_Amount[dest_index][my_index][k]/Client_TX_Amount[i][j][k])
-                    else:
-                        MDR_holder.append(0)
-                plt.plot(X_axis, MDR_holder, LINE_COLORS[j])
-            plt.legend(legend)
-            plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
-            plt.show()
-            plt.close()
+        try:
+            print("########### Plotting " + DATATYPE_LIST[7] + " ###########")
+            #Now plotting the MDR data
+            for i in range(0,len(Client_TX_Amount_average)):
+                plt.ylabel(DATATYPE_LIST[7])
+                plt.xlabel("Time (s)")
+                # fig.tight_layout()
+                plt.xlim([0, (NUM_SAMPLES - 1) // SAMPLING_FREQ])
+                plt.grid(True)
+                # Construct legend for this node's data
+                legend = []
+                for j in range(0,len(Client_TX_Amount_average[i])):
+                    dest_add = CLIENT_TO_DEST_add[i][j]
+                    #Define the mdr holder
+                    MDR_holder = []
+                    legend.append("Client " + str(client_add))
+                    for k in range(0,len(Client_TX_Amount_average[i][j])):
+                        #Obtain index of the current client the measurements were received from
+                        dest_index = DEST_add.index(dest_add)
+                        # Obtain index of the current destination in the client's destination index
+                        my_index = DEST_TO_CLIENT_add[dest_index].index(CLIENT_add[i])
+                        #As such the corresponding data received was received by dest_index from my_index
+                        if (Client_TX_Amount_average[i][j][k]!=0):
+                            MDR_holder.append(Dest_RX_Amount_average[dest_index][my_index][k]/Client_TX_Amount_average[i][j][k])
+                        else:
+                            MDR_holder.append(0)
+                    plt.plot(X_axis, MDR_holder, LINE_COLORS[j])
+                plt.legend(legend)
+                plt.savefig(test_array[current_test] + measurement_array[7] + "_for_client_"+str(CLIENT_add[i])+".pdf")
+                plt.show()
+                plt.close()
+        except:
+            print(" MDR PROBLEM DUH ")
 
         print("########### Plotting " + DATATYPE_LIST[8] + " ###########")
         DST_Network = nx.DiGraph()
@@ -3008,11 +3307,11 @@ if __name__ == "__main__":
         DST_Network.update(G)
         Display_Destination_Graph(DST_Network)
 
-        print("########### Plotting " + DATATYPE_LIST[9] + " ###########")
-        ORIGIN_Network = nx.DiGraph()
-        G = Update_Origin_Graph()
-        ORIGIN_Network.update(G)
-        Display_Origin_Graph(ORIGIN_Network)
+        # print("########### Plotting " + DATATYPE_LIST[9] + " ###########")
+        # ORIGIN_Network = nx.DiGraph()
+        # G = Update_Origin_Graph()
+        # ORIGIN_Network.update(G)
+        # Display_Origin_Graph(ORIGIN_Network)
 
 
     if show_network_graph:
