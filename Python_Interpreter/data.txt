@@ -1,0 +1,2 @@
+The Amount Of Missed Indexes = 8
+The Total Download Time = 36600(ms)

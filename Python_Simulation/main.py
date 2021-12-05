@@ -6,12 +6,13 @@ import seaborn as sns
 from IPython.display import clear_output
 import bitstring
 import networkx as nx
+from PIL import Image
 
 #Define what needs to be tested
-AODV = True
+AODV = False
 AOMDV = False
 AOMDV_LB = False
-GRAPH = False
+GRAPH = True
 
 #Basic simulation parameters
 #Length of the message packet in bytes
@@ -2222,6 +2223,85 @@ if __name__ == "__main__":
         Display_Destination_Graph(DST_Network)
 
     if GRAPH:
+        # load the image
+        data_1 = np.load('Collision_data.npy')
+        data_2= np.load('Collision_data_STATIONARY.npy')
+        data_3 = np.load('Load_data.npy')
+        data_4= np.load('Load_data_STATIONARY.npy')
+        print(data_3)
+
+        data_3 = 1/44* data_3
+        data_4 = 1 / 44 * data_4
+
+        x_axis_1 = []
+        for i in range(0,len(data_3)):
+            x_axis_1.append(i*2)
+
+        x_axis_2 = []
+        for i in range(0,len(data_4)):
+            x_axis_2.append(i*2)
+
+        plt.grid()
+        plt.xlabel("Time (s)")
+        plt.ylabel("Packet Delivery Ratio")
+        plt.plot(x_axis_1,data_3)
+        plt.savefig("PDR_Driving.pdf")
+        plt.show()
+
+        # image = Image.open('img_100x100_1x8bit_B01R20_GRAY_grid_circles_progressive_b.png')
+        # # convert image to numpy array
+        # data = np.asarray(image)
+        # print(data[0])
+        # string_array = "{"
+        # IMAGE_DATA = []
+        # for i in range(0,len(data)):
+        #     for j in range(0,len(data[i])):
+        #         string_array+=str(data[i][j])+","
+        #         IMAGE_DATA.append(data[i][j])
+        # string_array+="}"
+        # print(string_array)
+        # # create Pillow image
+        # image2 = Image.fromarray(data)
+        # image2.show()
+        # IMAGE_ROWS = 5
+        # IMAGE_COL = 5
+        # # Read in the image data and create and image type. Save and display the image
+        # image_data_type = []
+        # for q in range(0, IMAGE_ROWS-1):
+        #     holder = []
+        #     for z in range(0, IMAGE_COL):
+        #         holder.append(IMAGE_DATA[(IMAGE_COL) * q + z])
+        #     image_data_type.append(holder)
+        # image_data_type = np.array(image_data_type)
+        # # create Pillow image
+        # image2 = Image.fromarray(image_data_type)
+        # image2.save("Obtained_Image.png", format="png")
+        # image2.show()
+        #
+        # # Writing the data from the image to a txt file
+        # # open text file
+        # text_file = open("data.txt", "w")
+        #
+        # # write string to file
+        # line1 = "The Amount Of Missed Indexes = "+"\n"
+        # line2 = "The Total Download Time = "+"\n"
+        # text_file.writelines([line1, line2])
+        # # close file
+        # text_file.close()
+        #
+        #
+        #
+        #
+        #
+        # # Gaining the TOA
+        # T_symbol = 2 ** 7 / (250*10**3)
+        # T_preamble = (8 + 4.25) * T_symbol
+        # PACKET_L = 14
+        # L_payload = 8 + ((8 * PACKET_L - 4 * 7 + 28 + 16 - 1 * 20) / (4 * 7)) * (1 + 4)
+        # T_payload = L_payload * T_symbol
+        # TOA = (T_preamble + T_payload)
+        #
+        # print(TOA)
         # print(channel_cap(55)/8)
         # x_axis = []
         # for i in range(0,int(2000/(PACKET_LENGTH+PREAMBLE_BYTE))):
@@ -2234,47 +2314,47 @@ if __name__ == "__main__":
         # print(path_loss(0.015)-6)
         # print(TOA*2)
         # Constructing the spreading factors to be testes
-        spreading_factor = [7,8,9,10,11,12]
-        # BW = [125*10**3,250*10**3]
-        x_axis = []
-        # for i in range(0,int(BIT_Rate_Calc(7,BW))):
+        # spreading_factor = [7,8,9,10,11,12]
+        # # BW = [125*10**3,250*10**3]
+        # x_axis = []
+        # # for i in range(0,int(BIT_Rate_Calc(7,BW))):
+        # #     x_axis.append(i)
+        # # for i in range(0,2000):
+        # #     x_axis.append(i)
+        # for i in range(0,256-PREAMBLE_BYTE):
         #     x_axis.append(i)
-        # for i in range(0,2000):
-        #     x_axis.append(i)
-        for i in range(0,256-PREAMBLE_BYTE):
-            x_axis.append(i)
-        results = [[],[],[],[],[],[]]
-        # results = [[], []]
-        # print(spreading_factor)
-        # print(x_axis)
+        # results = [[],[],[],[],[],[]]
+        # # results = [[], []]
+        # # print(spreading_factor)
+        # # print(x_axis)
+        # # for i in range(0,len(spreading_factor)):
+        # #     for j in range(0,len(x_axis)):
+        # #         results[i].append(calc_collision(x_axis[j],spreading_factor[i])*100)
+        #
+        # legend = ["SF7","SF8","SF9","SF10","SF11","SF12"]
+        # # legend = ["BW = 125KHz", "BW = 250 KHz"]
+        # # for i in range(0,len(BW)):
+        # #     for j in spreading_factor:
+        # #         results[i].append(BIT_Rate_Calc(j,BW[i]))
+        #
         # for i in range(0,len(spreading_factor)):
         #     for j in range(0,len(x_axis)):
-        #         results[i].append(calc_collision(x_axis[j],spreading_factor[i])*100)
-
-        legend = ["SF7","SF8","SF9","SF10","SF11","SF12"]
-        # legend = ["BW = 125KHz", "BW = 250 KHz"]
-        # for i in range(0,len(BW)):
-        #     for j in spreading_factor:
-        #         results[i].append(BIT_Rate_Calc(j,BW[i]))
-
-        for i in range(0,len(spreading_factor)):
-            for j in range(0,len(x_axis)):
-                results[i].append(TOA_calc(spreading_factor[i],x_axis[j])*1000)
-
+        #         results[i].append(TOA_calc(spreading_factor[i],x_axis[j])*1000)
+        #
+        # # for i in range(0,len(results)):
+        # #     plt.plot(spreading_factor,results[i],LINE_COLORS[i])
         # for i in range(0,len(results)):
-        #     plt.plot(spreading_factor,results[i],LINE_COLORS[i])
-        for i in range(0,len(results)):
-            plt.plot(x_axis,results[i],LINE_COLORS[i])
-        plt.legend(legend)
-        plt.xlabel("Data Packet Size (Bytes)")
-        # plt.xlabel("Current Load (packets/s)")
-        # plt.xlabel("Spreading Factor")
-        plt.ylabel("TOA (ms)")
-        # plt.ylabel("Bit Rate (bits/s)")
-        plt.grid()
-        plt.savefig("TOA_SF.pdf")
-        # plt.savefig("BR_SF.pdf")
-        plt.show()
+        #     plt.plot(x_axis,results[i],LINE_COLORS[i])
+        # plt.legend(legend)
+        # plt.xlabel("Data Packet Size (Bytes)")
+        # # plt.xlabel("Current Load (packets/s)")
+        # # plt.xlabel("Spreading Factor")
+        # plt.ylabel("TOA (ms)")
+        # # plt.ylabel("Bit Rate (bits/s)")
+        # plt.grid()
+        # plt.savefig("TOA_SF.pdf")
+        # # plt.savefig("BR_SF.pdf")
+        # plt.show()
         #print(TOA_calc(7,PREAMBLE_BYTE+PACKET_LENGTH))
 
 

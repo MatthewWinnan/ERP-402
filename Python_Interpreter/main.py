@@ -7,6 +7,7 @@ from IPython.display import clear_output
 import bitstring
 import networkx as nx
 from timeit import default_timer as timer
+from PIL import Image
 
 #Setting Print Options For The Terminal
 np.set_printoptions(precision=4, linewidth=170, edgeitems=10, floatmode='fixed', sign=' ')
@@ -15,12 +16,18 @@ plt.rcParams.update({'font.size': 13})
 live = False
 rrer_testing = False
 show_network_graph = False
+#Here we define the physical setup type
+client_2_router_destination = True
+client_1_router_destination = False
+router_4 = False
+validation = False
+car_test = False
 
 #Setting COM options
 #General COM parameters
 BYTE_ORDER = 'big'  # or 'big'
-SAMPLING_FREQ = 0.9  # Hz (every 1 sec)
-SAMPLING_TIME = 5 # Time to sample in seconds
+SAMPLING_FREQ = 0.5 # Hz (every 1 sec)
+SAMPLING_TIME = 20*1 # Time to sample in seconds
 NUM_SAMPLES = int(SAMPLING_TIME/(1/SAMPLING_FREQ) ) # 1 minute
 REPITITIONS = 1
 BAUD_RATE = 115200
@@ -34,17 +41,34 @@ COM_PORT_NODE_1 = 'COM34'
 COM_PORT_NODE_2 = 'COM35'
 COM_PORT_NODE_3 = 'COM30'
 COM_PORT_NODE_4 = 'COM3'
+COM_PORT_WIRESHARK = 'COM19'
 # COM_PORT_NODE_DESTINATION = 'COM33'
 COM_PORT_NODE_DESTINATION = 'COM33'
 
 #TEST PARAMETERS
 # What test are we doing????
-current_test = 1
+current_test = 0
 # Define the test strings
-test_array = ["RRER_TEST_TWO","BASIC_MESSAGE_FINAL","RRER_TEST_THREE","RREQ_TESTING","OFFICIAL_RRER_TESTING","OFFICIAL_HELLO_TESTING"]
+test_array = ["Official_Demo_1"]
 #Measurements taken
 measurement_array = ["_load_per_node","_pdr_per_node","_etx_per_node","_rssi_per_node","_snr_per_node",
                      "_throughput_per_dest","_ping_per_dest","_mdr_per_dest","_dest_route_visual","_origin_route_visual"]
+
+
+#STores the load of the network
+Load_Network = []
+#Stores the Collisions
+Collisions_Network = []
+
+#Stores the image data here
+IMAGE_DATA = []
+#Stores the download time
+Download_Time = 0
+#Stores the miss rate
+Miss_Amount = 0
+#Define the dimentions of the image
+IMAGE_ROWS = 5
+IMAGE_COL = 5
 
 #Store the addresses here
 #Address index corresponds to index of the measured node
@@ -120,9 +144,9 @@ NODE_ETX_value = []
 X_axis = np.linspace(0, (NUM_SAMPLES - 1) / SAMPLING_FREQ, NUM_SAMPLES)
 
 # Libraries to decode byte stream
-Start_Byte = ['S','L','P','N','R','M','T','C','D','O']
-Second_Byte = ['T','D','S','A','R','I','N','E','P']
-Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST','TE','CP','DA','CN','OA']
+Start_Byte = ['S','L','P','N','R','M','T','C','D','O','I']
+Second_Byte = ['T','D','S','A','R','I','N','E','P','M','L']
+Packet_Headers = ['MS','PI','MR','SN','RI','NS','PR','RA','ND','PS','LD','ST','TE','CP','DA','CN','OA','IM','MA','DT','SR','CL']
 Stop_Byte = 13 #Line feed denotes the end of line
 Next_Line = 10 #Endl indicates next measurement
 #Denotes the n'th byte of the header we are looking for
@@ -134,8 +158,8 @@ current_header = ''
 #Keeps count of the amount of loops currently performed
 loops = 0
 #Libraries for graphing
-DATATYPE_LIST = ['Load (packets/s)','Packet Delivery Ratio','ETX value for link',
-                 'RSSI for link (dBm)','SNR for link (dBm)','Throughput (packets/s)','Packet Delay (ms)',
+DATATYPE_LIST = ['Load (bytes/epoch)','Packet Delivery Ratio','ETX value for link',
+                 'RSSI for link (dBm)','SNR for link (dBm)','Throughput (packets/epoch)','Packet Delay (ms)',
                  'Message Delivery Ratio','Destination Route Visualize','Origin Route Visualize']
 LINE_COLORS = ['b','g','r','c','m','y','k','w']
 #Defining clock per second for microcontroller
@@ -191,6 +215,37 @@ def wait_for_start(ser):
             header = 2
         #Reads next byte
         rxData = int.from_bytes(ser.read(1), "big")
+
+
+def wait_for_wire_header(wait_byte,ser):
+    global rxData
+    global current_header
+    global header
+
+    load = 0
+    current_header = ''
+    shift = 0
+
+
+    while current_header != wait_byte:
+        print("Waiting for header " + wait_byte+ " current byte is " + chr(rxData) + " and current header is " + current_header)
+        # Resets if header not yet found
+        if (header == 2):
+            current_header = ''
+            header = 0
+            #An error occured
+            print(wait_byte+" not found wtf")
+        # Adds first byte
+        if (chr(rxData) in Start_Byte) and (header == 0):
+            current_header += chr(rxData)
+            header = 1
+        # If first byte found adds second byte
+        elif (chr(rxData) in Second_Byte) and (header == 1):
+            current_header += chr(rxData)
+            header = 2
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+    return False
 
 def wait_for_header(wait_byte,ser):
     global rxData
@@ -415,6 +470,46 @@ def wait_for_stop(ser):
         rxData = int.from_bytes(ser.read(1), "big")
 
 
+def read_wire_load(ser):
+    global rxData
+    global current_header
+    global header
+
+    load = 0
+    i = 0
+    current_header = ''
+
+    while (chr(rxData) != 'C'):
+        print("read_wire_load current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        load = load <<8 | (rxData)
+        # load = rxData - 48
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
+
+    return load
+
+def read_wire_col(ser):
+    global rxData
+    global current_header
+    global header
+
+    load = 0
+    i = 0
+    current_header = ''
+
+    while ( rxData != Stop_Byte):
+        print("read_wire_load current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        load = load <<8 | (rxData)
+        # load = rxData - 48
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
+
+    return load
+
 def read_load_data(ser):
     global rxData
     global current_header
@@ -457,6 +552,76 @@ def read_in_measurement(ser):
         i+=1
     return sent
 
+def read_in_PING(ser):
+    global rxData
+    global current_header
+    global header
+
+    sent = 0
+    current_header = ''
+    i = 0
+
+    while (rxData != Stop_Byte) and (chr(rxData) != 'R') and (chr(rxData) != 'I'):
+        print("read_in_measurement current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        sent = sent<<8 | rxData
+        # sent = rxData
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
+    return sent
+
+def read_in_Image(ser):
+    global rxData
+    global current_header
+    global header
+
+    current_header = ''
+
+    while (chr(rxData) != 'M'):
+        print("read_in_Image current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        IMAGE_DATA.append(rxData)
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+
+def read_in_MA(ser):
+    global rxData
+    global current_header
+    global header
+
+    sent = 0
+    current_header = ''
+    i = 0
+
+    while  (chr(rxData) != 'D'):
+        print("read_in_measurement current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        sent = sent<<8 | rxData
+        # sent = rxData
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
+    return sent
+
+def read_in_DT(ser):
+    global rxData
+    global current_header
+    global header
+
+    sent = 0
+    current_header = ''
+    i = 0
+
+    while  (rxData != Stop_Byte):
+        print("read_in_measurement current byte is " + str(rxData))
+        #Adds the measurement to the variable
+        sent = sent<<8 | rxData
+        # sent = rxData
+        # Reads next byte
+        rxData = int.from_bytes(ser.read(1), "big")
+        i+=1
+    return sent
 
 def measure_RSSI(ser):
     global rxData
@@ -1072,7 +1237,7 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
         # Clear header trackers
         header = 0
         current_header = ''
-        Amount_PING = read_in_measurement(ser)
+        Amount_PING = read_in_PING(ser)
         #Last byte is either 'R' or endl.
         #First save the new data
         while len(Dest_PING_Amount)<=Dest_Address_Index:
@@ -1091,6 +1256,57 @@ def read_in_AMOUNT_RECEIVED_DEST(ser):
             if(wait_for_next(ser)):
                 # This means that an error occured return with an error
                 return True
+        elif chr(rxData)=='I':
+            #Here we read in the Image, time taken to finish and drop times
+            header = 0
+            current_header = ''
+            if wait_for_header("IM",ser):
+                return True
+            header = 0
+            current_header = ''
+            read_in_Image(ser)
+            header = 0
+            current_header = ''
+            if wait_for_header("MA",ser):
+                return True
+            header = 0
+            current_header = ''
+            Miss_Amount = read_in_MA(ser)
+            header = 0
+            current_header = ''
+            if wait_for_header("DT",ser):
+                return True
+            Download_Time = read_in_DT(ser)
+
+            #Obtained all the data
+            #Read in the image data and create and image type. Save and display the image
+            image_data_type = []
+            print(len(IMAGE_DATA))
+            for q in range(0,IMAGE_ROWS-1):
+                holder = []
+                for z in range(0,IMAGE_COL):
+                    holder.append(IMAGE_DATA[(IMAGE_COL)*q+z])
+                image_data_type.append(holder)
+            image_data_type = np.array(image_data_type)
+            # create Pillow image
+            image2 = Image.fromarray(image_data_type)
+            image2.save("Obtained_Image.png", format="png")
+            image2.show()
+            #Writing the data from the image to a txt file
+            # open text file
+            text_file = open("data.txt", "w")
+
+            # write string to file
+            line1 = "The Amount Of Missed Indexes = "+str(Miss_Amount)+"\n"
+            line2 = "The Total Download Time = "+str(Download_Time)+"(ms)"+"\n"
+            text_file.writelines([line1, line2])
+            # close file
+            text_file.close()
+
+
+
+
+
         else:
             wait_for_stop(ser)
         #Remember the last read byte at this point is either endl or the start of a new node measurement.
@@ -2686,6 +2902,40 @@ def rx_Read_TESTING(ser,loops):
                 
     return False
 
+
+
+# #STores the load of the network
+# Load_Network = []
+# #Stores the Collisions
+# Collisions_Network = []
+
+def rx_Read_Wireshark(ser,loops):
+    global rxData
+    global current_header
+    global header
+    global Load_Network
+    global Collisions_Network
+
+    # Clear header trackers
+    header = 0
+    current_header = ''
+    # Start measurements
+    rxData = int.from_bytes(ser.read(1), "big")
+    # First Obtains the start of the measurements
+    wait_for_wire_header("SR",ser)
+    # Obtains the Load Reading
+    Load_Network.append(read_wire_load(ser))
+    # Wait for Col
+    wait_for_wire_header("CL",ser)
+    #Read in collisions
+    Collisions_Network.append(read_wire_col(ser))
+    #Wait for end
+
+    return False
+
+
+
+
 if __name__ == "__main__":
     if live:
         print("##### TODO LIVE PLOTS #########")
@@ -2729,150 +2979,370 @@ if __name__ == "__main__":
             #         plt.legend(loc='upper right')
             # plt.grid(True)
             # plt.pause(0.33)
+    elif car_test:
+        header = 0
+        print("###### Testing Wireshark ########")
+        try:
+            # Setup the serial
+            ser_WireShark = serial.Serial(COM_PORT_WIRESHARK, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                   bytesize=serial.EIGHTBITS)
+            print("Connected to " + COM_PORT_WIRESHARK + ".")
+        except:
+            print("Could not connect to the device " + COM_PORT_WIRESHARK + ".")
+            exit()
+
+        for i in range(NUM_SAMPLES):
+            flag_got = False  # Says if got error
+            # Every time the serial need to be opened then closed again
+            # Now obtain the data
+            if (rx_Read_Wireshark(ser_WireShark, i) and (not flag_got)):
+                flag_got = True
+
+        #At the end just save the variables
+        Load_Network = np.array(Load_Network)
+        Collisions_Network = np.array(Collisions_Network)
+
+        x_axis = []
+        for b in range(0,len(Load_Network)):
+            x_axis.append(b*2)
+
+        plt.xlabel("Time (s)")
+        plt.ylabel("Load (bytes/epoch)")
+        plt.grid()
+        plt.plot(x_axis,Load_Network)
+        plt.savefig("Channel_Load.pdf")
+        plt.show()
+        plt.close()
+
+        plt.xlabel("Time (s)")
+        plt.ylabel("Collisions Per Epoch")
+        plt.grid()
+        plt.plot(x_axis,Collisions_Network)
+        plt.savefig("Channel_Collision.pdf")
+        plt.show()
+        plt.close()
+
+
+
+        # np.save('Load_data.npy', Load_Network)
+        # np.save('Collision_data.npy', Collisions_Network)
+
+
     elif not live:
         header = 0
+        # # Here we define the physical setup type
+        # client_2_router_destination = False
+        # client_1_router_destination = False
+        # router_4 = False
+        # validation = False
         for c in range(0,REPITITIONS):
             #Merely samples the serial at these intervals
-            # try:
-            #     # Setup the serial
-            #     ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-            #                            bytesize=serial.EIGHTBITS)
-            #     print("Connected to " + COM_PORT_NODE_1 + ".")
-            # except:
-            #     print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
-            #     exit()
-            # try:
-            #     # Setup the serial
-            #     ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-            #                                bytesize=serial.EIGHTBITS)
-            #     print("Connected to " + COM_PORT_NODE_CLIENT + ".")
-            # except:
-            #     print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
-            #     exit()
-            # try:
-            #     # Setup the serial
-            #     ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-            #                             bytesize=serial.EIGHTBITS)
-            #     print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
-            # except:
-            #     print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
-            #     exit()
-            # try:
-            #     # Setup the serial
-            #     ser_R2 = serial.Serial(COM_PORT_NODE_2, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-            #                             bytesize=serial.EIGHTBITS)
-            #     print("Connected to " + COM_PORT_NODE_2 + ".")
-            # except:
-            #     print("Could not connect to the device " + COM_PORT_NODE_2 + ".")
-            #     exit()
-            # try:
-            #     # Setup the serial
-            #     ser_R4 = serial.Serial(COM_PORT_NODE_4, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-            #                             bytesize=serial.EIGHTBITS)
-            #     print("Connected to " + COM_PORT_NODE_4 + ".")
-            # except:
-            #     print("Could not connect to the device " + COM_PORT_NODE_4 + ".")
-            #     exit()
+            if client_2_router_destination :
+                print("###### Testing client_2_router_destination ########")
+                try:
+                    # Setup the serial
+                    ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                           bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_1 + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                               bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                            bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_R2 = serial.Serial(COM_PORT_NODE_2, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                            bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_2 + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_2 + ".")
+                    exit()
+            elif client_1_router_destination:
+                print("###### Testing client_1_router_destination ########")
+                try:
+                    # Setup the serial
+                    ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                           bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_1 + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                               bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                            bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
+                    exit()
 
-            ######################################################
-            ## VALIDATION TESTING IS DEFINED HERE
-            #################################################
-            try:
-                # Setup the serial
-                ser_Test = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
-                                        bytesize=serial.EIGHTBITS)
-                print("Connected to " + COM_PORT_TEST + ".")
-            except:
-                print("Could not connect to the device " + COM_PORT_TEST + ".")
+            elif router_4:
+                print("###### Testing router_4 ########")
+                try:
+                    # Setup the serial
+                    ser_R1 = serial.Serial(COM_PORT_NODE_1, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                           bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_1 + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_1 + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Client = serial.Serial(COM_PORT_NODE_CLIENT, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                               bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_CLIENT + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_CLIENT + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_Dst = serial.Serial(COM_PORT_NODE_DESTINATION, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                            bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_DESTINATION + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_DESTINATION + ".")
+                    exit()
+                try:
+                    # Setup the serial
+                    ser_R2 = serial.Serial(COM_PORT_NODE_2, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                            bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_NODE_2 + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_NODE_2 + ".")
+                    exit()
+
+
+            elif validation:
+                ######################################################
+                ## VALIDATION TESTING IS DEFINED HERE
+                #################################################
+                try:
+                    # Setup the serial
+                    ser_Test = serial.Serial(COM_PORT_TEST, BAUD_RATE, timeout=None, parity=serial.PARITY_NONE,
+                                             bytesize=serial.EIGHTBITS)
+                    print("Connected to " + COM_PORT_TEST + ".")
+                except:
+                    print("Could not connect to the device " + COM_PORT_TEST + ".")
+                    exit()
+                #############################################################
+                ###VALIDATION CODE SETUP ENDS ##############################
+                ############################################################
+            else:
+                print("Please Select A Valid Setting")
                 exit()
-            #############################################################
-            ###VALIDATION CODE SETUP ENDS ##############################
-            ############################################################
 
 
             start = timer()
             timer_flag = True
             for i in range(NUM_SAMPLES):
+                if client_2_router_destination:
+                    flag_got = False  # Says if got error
+                    # Every time the serial need to be opened then closed again
+                    # Now obtain the data
+                    if (rx_Read_Client(ser_Client, i) and (not flag_got)):
+                        flag_got = True
+                    # Now obtain the data
+                    if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
+                        flag_got = True
+                    #Now obtain the data
+                    if (rrer_testing):
+                        if (timer()-start>10) and (timer_flag):
+                            timer_flag = False
+                    else:
+                        if (timer()-start>10000) and (timer_flag):
+                            timer_flag = False
 
-                flag_got = False #Says if got error
-                #Every time the serial need to be opened then closed again
-                # Now obtain the data
-                # if (rx_Read_Client(ser_Client, i) and (not flag_got)):
-                #     flag_got = True
+                    if (timer_flag):
+                        if (rx_Read_Node(ser_R1,i) and (not flag_got)):
+                            flag_got = True
+                    else:
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        ser_R1.close()
+                    # Now obtain the data
+                    if (rx_Read_Node(ser_R2,i) and (not flag_got)):
+                        flag_got = True
+                    if(flag_got):
+                        print("Increase NUM_SAMPLES")
+                        NUM_SAMPLES+=1
+                    plt.pause(1 / SAMPLING_FREQ)
 
+                elif client_1_router_destination:
+                    flag_got = False  # Says if got error
+                    # Every time the serial need to be opened then closed again
+                    # Now obtain the data
+                    if (rx_Read_Client(ser_Client, i) and (not flag_got)):
+                        flag_got = True
+                    # Now obtain the data
+                    if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
+                        flag_got = True
+                    #Now obtain the data
+                    if (rrer_testing):
+                        if (timer()-start>10) and (timer_flag):
+                            timer_flag = False
+                    else:
+                        if (timer()-start>10000) and (timer_flag):
+                            timer_flag = False
+
+                    if (timer_flag):
+                        if (rx_Read_Node(ser_R1,i) and (not flag_got)):
+                            flag_got = True
+                    else:
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        ser_R1.close()
+                    if(flag_got):
+                        print("Increase NUM_SAMPLES")
+                        NUM_SAMPLES+=1
+                    plt.pause(1 / SAMPLING_FREQ)
+
+                elif router_4:
+                    flag_got = False  # Says if got error
+                    # Every time the serial need to be opened then closed again
+                    # Now obtain the data
+                    if (rx_Read_Node(ser_Client, i) and (not flag_got)):
+                        flag_got = True
+                    # Now obtain the data
+                    if (rx_Read_Node(ser_Dst, i) and (not flag_got)):
+                        flag_got = True
+                    #Now obtain the data
+                    if (rrer_testing):
+                        if (timer()-start>10) and (timer_flag):
+                            timer_flag = False
+                    else:
+                        if (timer()-start>10000) and (timer_flag):
+                            timer_flag = False
+
+                    if (timer_flag):
+                        if (rx_Read_Node(ser_R1,i) and (not flag_got)):
+                            flag_got = True
+                    else:
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        print("###### SWITCH OFFF #############")
+                        ser_R1.close()
+                    # Now obtain the data
+                    if (rx_Read_Node(ser_R2,i) and (not flag_got)):
+                        flag_got = True
+                    if(flag_got):
+                        print("Increase NUM_SAMPLES")
+                        NUM_SAMPLES+=1
+                    plt.pause(1 / SAMPLING_FREQ)
+                elif validation:
+                    flag_got = False  # Says if got error
+                    ######################################################
+                    ## VALIDATION TESTING IS DEFINED HERE
+                    #################################################
+                    if (rx_Read_TESTING(ser_Test, i) and (not flag_got)):
+                        flag_got = True
+                    #############################################################
+                    ###VALIDATION CODE SETUP ENDS ##############################
+                    ############################################################
+                    if(flag_got):
+                        print("Increase NUM_SAMPLES")
+                        NUM_SAMPLES+=1
+                else:
+                    print("Please Select A Valid Setting")
+                    exit()
+
+            #After we get the samples we close every serial to reset the tests
+            if client_2_router_destination:
+                if (timer_flag):
+                    ser_R1.close()
+                ser_R2.close()
+                ser_Dst.close()
+                ser_Client.close()
+            elif client_1_router_destination:
+                if (timer_flag):
+                    ser_R1.close()
+                ser_Dst.close()
+                ser_Client.close()
+            elif router_4:
+                if (timer_flag):
+                    ser_R1.close()
+                ser_R2.close()
+                ser_Dst.close()
+                ser_Client.close()
+            elif validation:
                 ######################################################
                 ## VALIDATION TESTING IS DEFINED HERE
                 #################################################
-                if (rx_Read_TESTING(ser_Test, i) and (not flag_got)):
-                    flag_got = True
+                ser_Test.close()
                 #############################################################
                 ###VALIDATION CODE SETUP ENDS ##############################
                 ############################################################
-
-                # if (rx_Read_Client(ser_Client, i) and (not flag_got)):
-                #     flag_got = True
-                # Now obtain the data
-                # if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
-                #     flag_got = True
-                # if (rx_Read_Dest(ser_Dst, i) and (not flag_got)):
-                #     flag_got = True
-                # #Now obtain the data
-                # if (rrer_testing):
-                #     if (timer()-start>10) and (timer_flag):
-                #         timer_flag = False
-                # else:
-                #     if (timer()-start>10000) and (timer_flag):
-                #         timer_flag = False
-                #
-                # if (timer_flag):
-                #     if (rx_Read_Node(ser_R1,i) and (not flag_got)):
-                #         flag_got = True
-                # else:
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     print("###### SWITCH OFFF #############")
-                #     ser_R1.close()
-                #Now obtain the data
-                # if (rx_Read_Node(ser_R2,i) and (not flag_got)):
-                #     flag_got = True
-                # # #Now obtain the data
-                # # if (rx_Read_Node(ser_R4,i) and (not flag_got)):
-                # #     flag_got = True
-                #
-                # if(flag_got):
-                #     print("Increase NUM_SAMPLES")
-                #     NUM_SAMPLES+=1
-
-                plt.pause(1/SAMPLING_FREQ)
-            #After we get the samples we close every serial to reset the tests
-            # if (timer_flag):
-            #     ser_R1.close()
-            # # ser_R4.close()
-            # ser_R2.close()
-            # ser_Dst.close()
-            # ser_Client.close()
-            ######################################################
-            ## VALIDATION TESTING IS DEFINED HERE
-            #################################################
-            ser_Test.close()
-            #############################################################
-            ###VALIDATION CODE SETUP ENDS ##############################
-            ############################################################
+            else:
+                print("Please Select A Valid Test")
+                exit()
 
             if (c==0):
                 #This was the first sample so we have a rough idea of how the data will look. Construct the average arrays

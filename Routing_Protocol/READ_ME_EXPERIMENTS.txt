@@ -45,6 +45,12 @@ CLOCKS_PER_SEC   = 100
 'OA' OA denotes that the origin address is following
 'CN' CN denotes that the client node data follows
 
+'IM' IM denotes that image data is being sent
+'MA' MA denotes the amount of times index was not received as expected
+'DT' DT denotes the download time
+
+
+
 '\n' the endline denotes the ending of a set of measurements.
 Always start next set of measurements with the current node's 
 address.
@@ -69,8 +75,14 @@ continues if there are more instances of the measurement.
 'Next hop address','T','E','Next hop address','R','A'........, '\n']
 ----------------------------------------------------------------------------------------------------
 Following are additional parameters to be sent by destination node.
+#IF no image
 9) ['Destination node address','C','N',Client address,'M','R',
-'Amount of messages received','P','I','Ping','R','A',........,'\n']
+'Amount of messages received','P','I','Ping',R','A',........,'\n']
+#IF image needs to be printed
+9) ['Destination node address','C','N',Client address,'M','R',
+'Amount of messages received','P','I','Ping',R','A',........,
+'I','M','Image bytes','M','A','Message miss amount','D','T','Download Time','\n']
+
 10) Is calculated by using the data from 9 for both the source and 
 destination
 11) Is calculated by using 10's Ping reading
